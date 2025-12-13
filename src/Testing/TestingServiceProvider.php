@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Warete\MoonshineFullCalendar\Testing;
+namespace Warete\MoonShineFullCalendar\Testing;
 
 use Illuminate\Support\ServiceProvider;
 use MoonShine\Contracts\Core\DependencyInjection\ConfiguratorContract;

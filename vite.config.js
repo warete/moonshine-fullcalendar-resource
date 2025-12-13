@@ -4,13 +4,13 @@ export default defineConfig({
         emptyOutDir: false,
         manifest: true,
         rollupOptions: {
-            input: ['resources/js/app.js'],
+            input: ['resources/js/calendar.js'],
             output: {
-                entryFileNames: `js/package.js`,
+                entryFileNames: `js/full-calendar.js`,
                 assetFileNames: file => {
                     let ext = file.name.split('.').pop()
                     if (ext === 'css') {
-                        return 'css/package.css'
+                        return 'css/full-calendar.css'
                     }
 
                     if (ext === 'woff2') {

@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Warete\MoonshineFullCalendar\Tests\Feature;
+namespace Warete\MoonShineFullCalendar\Tests\Feature;
 
 use PHPUnit\Framework\Attributes\Test;
-use Warete\MoonshineFullCalendar\Tests\TestCase;
+use Warete\MoonShineFullCalendar\Tests\TestCase;
 
 final class ExampleTest extends TestCase
 {

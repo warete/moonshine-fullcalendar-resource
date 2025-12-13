@@ -1,14 +1,14 @@
 <?php
 
-namespace Warete\MoonshineFullCalendar\Tests;
+namespace Warete\MoonShineFullCalendar\Tests;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use MoonShine\Laravel\Models\MoonshineUser;
 use MoonShine\Laravel\Models\MoonshineUserRole;
 use MoonShine\Laravel\Providers\MoonShineServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
-use Warete\MoonshineFullCalendar\Providers\PackageNameServiceProvider;
-use Warete\MoonshineFullCalendar\Testing\TestingServiceProvider;
+use Warete\MoonShineFullCalendar\Providers\PackageNameServiceProvider;
+use Warete\MoonShineFullCalendar\Testing\TestingServiceProvider;
 
 abstract class TestCase extends Orchestra
 {

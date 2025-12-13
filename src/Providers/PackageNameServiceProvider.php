@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Warete\MoonshineFullCalendar\Providers;
+namespace Warete\MoonShineFullCalendar\Providers;
 
 use Illuminate\Support\ServiceProvider;
 
