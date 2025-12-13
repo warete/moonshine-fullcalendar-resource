@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Warete\MoonShineFullCalendar\Concerns;
 
-use Illuminate\Database\Eloquent\Model;
+use MoonShine\Contracts\Core\TypeCasts\DataWrapperContract;
 use MoonShine\Contracts\UI\ActionButtonContract;
 
 trait HasEventActions
@@ -27,31 +27,28 @@ trait HasEventActions
     /**
      * Get all event actions for a model
      */
-    public function getEventActionsForModel(Model $model): array
+    public function getEventActionsForItem(DataWrapperContract $item): array
     {
         $actions = [];
 
         // Get standard CRUD buttons from resource
-        $resource = $this->setItemID($model->getKey());
-        $activeActions = $resource->getActiveActions();
+        $resource = $this->setItemID($item->getKey());
+        $activeActions = $resource->getIndexPage()->getButtons();
 
+        /** @var ActionButtonContract $action */
         foreach ($activeActions as $action) {
-            if ($resource->can($action->getAbility(), $model)) {
-                $button = $resource
-                    ->getActionButton($action)
-                    ->setAsync()
-                    ->setItem($model)
-                    ->setData($this->getCaster()->cast(['id' => $model->getKey()]));
+            $button = $action
+                ->async()
+                ->setData($item);
 
-                $actions[] = $button;
-            }
+            $actions[] = $button;
         }
 
         // Add custom actions
         foreach ($this->customEventActions as $action) {
             if ($action instanceof ActionButtonContract) {
                 // Set data for the action if needed
-                $action->setData(['id' => $model->getKey()]);
+                $action->setData($item);
                 $actions[] = $action;
             }
         }
@@ -62,11 +59,11 @@ trait HasEventActions
     /**
      * Render event actions as HTML buttons
      */
-    public function renderEventActions(Model $model): array
+    public function renderEventActions(DataWrapperContract $item): array
     {
         $rendered = [];
 
-        foreach ($this->getEventActionsForModel($model) as $action) {
+        foreach ($this->getEventActionsForItem($item) as $action) {
             $rendered[] = (string) $action->render();
         }
 

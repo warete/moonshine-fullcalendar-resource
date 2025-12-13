@@ -6,7 +6,8 @@ namespace Warete\MoonShineFullCalendar\Concerns;
 
 use Closure;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Collection;
+use MoonShine\Contracts\Core\TypeCasts\DataWrapperContract;
+use MoonShine\Laravel\TypeCasts\ModelDataWrapper;
 use Warete\MoonShineFullCalendar\DTO\CalendarEvent;
 
 trait HasEventFormatters
@@ -37,15 +38,30 @@ trait HasEventFormatters
     }
 
     /**
+     * Format data for FullCalendar - main entry point
+     */
+    public function formatCalendarItem(DataWrapperContract $item): array
+    {
+        $item->getOriginal();
+
+        return $this->applyEventFormatters($item);
+
+    }
+
+    /**
      * Apply formatters to a model
      */
-    protected function applyEventFormatters(Model $model): array
+    protected function applyEventFormatters(DataWrapperContract $item): array
     {
         $eventData = [];
 
+        if ($item instanceof ModelDataWrapper) {
+            $eventData = $this->formatEventFromModel($item->getOriginal());
+        }
+
         // Apply each formatter
         foreach ($this->eventFormatters as $formatter) {
-            $formatted = $formatter($model);
+            $formatted = $formatter($item, $eventData);
 
             // If formatter returns an array, merge it
             if (is_array($formatted)) {
@@ -58,20 +74,37 @@ trait HasEventFormatters
             }
         }
 
-        // If no custom formatters, use the default one
-        if (empty($this->eventFormatters)) {
-            $eventData = $this->formatEventFromModel($model);
-        }
-
         return $eventData;
     }
 
+
+
     /**
-     * Format a collection of models to calendar events
+     * Format model to calendar event array
      */
-    public function formatEvents(Collection $models): Collection
+    public function formatEventFromModel(Model $model): array
     {
-        return $models->map(fn ($model) => $this->applyEventFormatters($model));
+        $event = [
+            'id' => $model->getKey(),
+            'title' => $this->getEventTitle($model),
+            'start' => $this->getEventStart($model),
+            'end' => $this->getEventEnd($model),
+        ];
+
+        // Add description if available
+        if ($description = $this->getEventDescription($model)) {
+            $event['extendedProps']['description'] = $description;
+        }
+
+        // Add CSS classes
+        $event['classNames'] = $this->getEventClassNames($model);
+
+        // Add colors
+        $event['backgroundColor'] = $this->getEventBackgroundColor($model);
+        $event['textColor'] = $this->getEventTextColor($model);
+        $event['borderColor'] = $this->getEventBorderColor($model);
+
+        return $event;
     }
 
     /**
