@@ -108,6 +108,15 @@ export function registerFullCalendar() {
                 availableLocales: getAvailableLocaleCodes()
             });
 
+            // [FIX] Log timezone configuration for debugging
+            const timeZone = this.config.timeZone || this.config.timezone || 'local';
+            this.log('debug', '[FIX] Timezone configuration', {
+                configTimeZone: this.config.timeZone,
+                configTimezone: this.config.timezone,
+                finalTimeZone: timeZone,
+                'local': Intl.DateTimeFormat().resolvedOptions().timeZone
+            });
+
             // Build FullCalendar config
             const calendarConfig = {
                 ...this.config,
@@ -121,7 +130,10 @@ export function registerFullCalendar() {
                 editable: this.config.editable !== undefined ? this.config.editable : false,
                 selectable: this.config.selectable !== undefined ? this.config.selectable : true,
                 locale: localeObj, // Use locale object from registry
-                timeZone: this.config.timeZone || 'local',
+                // [FIX] Support both timeZone and timezone (PHP convention) - use 'local' if not set
+                // If timezone is set, use it as IANA timezone (e.g., 'Europe/Moscow', 'UTC')
+                // FullCalendar will parse event times and display in this timezone
+                timeZone: this.config.timeZone || this.config.timezone || 'local',
 
                 // Event handlers
                 events: this.fetchEvents.bind(this),
