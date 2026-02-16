@@ -7,7 +7,7 @@ use MoonShine\Laravel\Models\MoonshineUser;
 use MoonShine\Laravel\Models\MoonshineUserRole;
 use MoonShine\Laravel\Providers\MoonShineServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
-use Warete\MoonShineFullCalendar\Providers\PackageNameServiceProvider;
+use Warete\MoonShineFullCalendar\Providers\FullCalendarServiceProvider;
 use Warete\MoonShineFullCalendar\Testing\TestingServiceProvider;
 
 abstract class TestCase extends Orchestra
@@ -41,7 +41,7 @@ abstract class TestCase extends Orchestra
     {
         return [
             MoonShineServiceProvider::class,
-            PackageNameServiceProvider::class,
+            FullCalendarServiceProvider::class,
             TestingServiceProvider::class,
         ];
     }

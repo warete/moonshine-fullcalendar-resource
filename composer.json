@@ -50,7 +50,7 @@
     "extra": {
         "laravel": {
             "providers": [
-                "Warete\\MoonShineFullCalendar\\Providers\\PackageNameServiceProvider"
+              "Warete\\MoonShineFullCalendar\\Providers\\FullCalendarServiceProvider"
             ]
         }
     }

@@ -6,7 +6,7 @@ namespace Warete\MoonShineFullCalendar\Providers;
 
 use Illuminate\Support\ServiceProvider;
 
-final class PackageNameServiceProvider extends ServiceProvider
+final class FullCalendarServiceProvider extends ServiceProvider
 {
     public function register(): void
     {

@@ -7,6 +7,8 @@ export default defineConfig({
         rollupOptions: {
             input: ['resources/js/register.js'],
             output: {
+                format: 'iife',
+                name: 'MoonShineFullCalendar',
                 entryFileNames: 'js/full-calendar.js',
                 chunkFileNames: 'js/[name]-[hash].js',
                 assetFileNames: file => {
@@ -24,8 +26,7 @@ export default defineConfig({
             }
         },
         outDir: 'public',
-        format: 'iife', // Immediately Invoked Function Expression
         target: 'es2015',
-        minify: 'terser',
+        minify: 'esbuild',
     },
 });
