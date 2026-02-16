@@ -19,7 +19,7 @@
         debug: {{ config('fullcalendar.debug', env('FULLCALENDAR_DEBUG', false)) ? 'true' : 'false' }}
     })"
     x-init="initCalendar"
-    class="full-calendar-container"
+    class="full-calendar-container relative"
     x-cloak
 >
     <!-- Calendar toolbar (optional - can be handled by FullCalendar) -->
@@ -30,17 +30,23 @@
         </div>
     @endif
 
-    <!-- Loading state -->
-    <div x-show="loading" class="full-calendar-loading" style="display: none;">
-        <div class="flex items-center justify-center py-12">
+    <!-- FullCalendar container - always visible for proper rendering -->
+    <div id="full-calendar-{{ $resource?->getUriKey() ?? 'default' }}" class="full-calendar"></div>
+
+    <!-- Loading state - overlay on top of calendar -->
+    <div x-show="loading" x-transition.opacity
+         class="full-calendar-loading absolute inset-0 flex items-center justify-center bg-white/80 dark:bg-gray-900/80 z-10"
+         style="display: none;">
+        <div class="flex items-center">
             <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
             <span class="ml-2 text-text-secondary">{{ __('Loading events...') }}</span>
         </div>
     </div>
 
-    <!-- Error state -->
-    <div x-show="error" x-cloak class="full-calendar-error hidden">
-        <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4">
+    <!-- Error state - overlay on top of calendar -->
+    <div x-show="error" x-cloak x-transition.opacity
+         class="full-calendar-error absolute inset-0 flex items-center justify-center z-10 hidden">
+        <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4 max-w-md">
             <div class="flex">
                 <div class="flex-shrink-0">
                     <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
@@ -56,9 +62,6 @@
             </div>
         </div>
     </div>
-
-    <!-- FullCalendar container -->
-    <div x-show="!loading && !error" id="full-calendar-{{ $resource?->getUriKey() ?? 'default' }}" class="full-calendar"></div>
 
     <!-- Hidden event trigger for MoonShine actions -->
     <div x-data="{ refreshTrigger: $watch('window.moonshineFullCalendarRefresh', value => {

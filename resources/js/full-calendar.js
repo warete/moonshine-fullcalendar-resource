@@ -8,6 +8,55 @@ import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import listPlugin from '@fullcalendar/list';
 import interactionPlugin from '@fullcalendar/interaction';
+import ruLocale from '@fullcalendar/core/locales/ru';
+
+/**
+ * Locale registry for FullCalendar
+ * Maps locale codes to imported locale objects
+ */
+const FULLCALENDAR_LOCALES = {
+    en: null, // English is built-in, no import needed
+    ru: ruLocale,
+    // Extensible: add more locales here as needed
+    // es: esLocale,
+    // de: deLocale,
+    // fr: frLocale,
+};
+
+/**
+ * Get locale object by code
+ * @param {string} localeCode - Locale code (e.g., 'en', 'ru')
+ * @returns {object|null} Locale object or null for built-in English
+ */
+function getFullCalendarLocale(localeCode = 'en') {
+    const normalizedCode = localeCode.toLowerCase().split('-')[0]; // Handle 'ru-RU' -> 'ru'
+    console.log('[FullCalendar] getFullCalendarLocale', {
+        requested: localeCode,
+        normalized: normalizedCode,
+        available: Object.keys(FULLCALENDAR_LOCALES)
+    });
+
+    // Check if locale exists in registry
+    if (FULLCALENDAR_LOCALES.hasOwnProperty(normalizedCode)) {
+        console.log('[FullCalendar] Locale found in registry', { locale: normalizedCode });
+        return FULLCALENDAR_LOCALES[normalizedCode];
+    }
+
+    // Default to English if locale not found
+    console.warn('[FullCalendar] Locale not found, defaulting to English', {
+        requested: localeCode,
+        normalized: normalizedCode
+    });
+    return FULLCALENDAR_LOCALES.en;
+}
+
+/**
+ * Get all available locale codes
+ * @returns {string[]} Array of available locale codes
+ */
+function getAvailableLocaleCodes() {
+    return Object.keys(FULLCALENDAR_LOCALES);
+}
 
 /**
  * FullCalendar Alpine Component
@@ -29,6 +78,7 @@ export function registerFullCalendar() {
         endpoint: props.endpoint || '',
         async: props.async !== undefined ? props.async : false,
         debug: props.debug || false,
+        currentLocale: props.config?.locale || 'en',
 
         /**
          * Initialize FullCalendar
@@ -37,7 +87,8 @@ export function registerFullCalendar() {
             this.log('debug', 'Initializing FullCalendar', {
                 endpoint: this.endpoint,
                 async: this.async,
-                config: this.config
+                config: this.config,
+                locale: this.currentLocale
             });
 
             const calendarEl = this.$el.querySelector('.full-calendar');
@@ -47,6 +98,15 @@ export function registerFullCalendar() {
                 this.error = 'Calendar container not found';
                 return;
             }
+
+            // Get locale object from registry
+            const localeObj = getFullCalendarLocale(this.currentLocale);
+
+            this.log('debug', 'Locale configuration', {
+                localeCode: this.currentLocale,
+                localeObject: localeObj,
+                availableLocales: getAvailableLocaleCodes()
+            });
 
             // Build FullCalendar config
             const calendarConfig = {
@@ -60,7 +120,7 @@ export function registerFullCalendar() {
                 },
                 editable: this.config.editable !== undefined ? this.config.editable : false,
                 selectable: this.config.selectable !== undefined ? this.config.selectable : true,
-                locale: this.config.locale || 'en',
+                locale: localeObj, // Use locale object from registry
                 timeZone: this.config.timeZone || 'local',
 
                 // Event handlers
@@ -93,7 +153,8 @@ export function registerFullCalendar() {
                 this.calendar.render();
 
                 this.log('info', 'FullCalendar initialized successfully', {
-                    view: this.calendar.view.type
+                    view: this.calendar.view.type,
+                    locale: this.currentLocale
                 });
             } catch (error) {
                 this.log('error', 'Failed to initialize FullCalendar', {
@@ -286,6 +347,52 @@ export function registerFullCalendar() {
         },
 
         /**
+         * Set calendar locale dynamically
+         * @param {string} localeCode - New locale code (e.g., 'en', 'ru')
+         */
+        setLocale(localeCode) {
+            this.log('debug', 'Setting locale', {
+                currentLocale: this.currentLocale,
+                newLocale: localeCode
+            });
+
+            if (!this.calendar) {
+                this.log('warn', 'Cannot set locale: calendar not initialized');
+                return;
+            }
+
+            // Get locale object from registry
+            const localeObj = getFullCalendarLocale(localeCode);
+
+            // Update locale in FullCalendar
+            this.calendar.setOption('locale', localeObj);
+
+            // Update current locale tracking
+            this.currentLocale = localeCode;
+
+            this.log('info', 'Locale updated successfully', {
+                locale: localeCode,
+                localeObject: localeObj
+            });
+        },
+
+        /**
+         * Get current locale code
+         * @returns {string} Current locale code
+         */
+        getLocale() {
+            return this.currentLocale;
+        },
+
+        /**
+         * Get available locale codes
+         * @returns {string[]} Array of available locale codes
+         */
+        getAvailableLocales() {
+            return getAvailableLocaleCodes();
+        },
+
+        /**
          * Log messages to console if debug mode is enabled
          */
         log(level, message, data = {}) {
@@ -335,29 +442,19 @@ if (window.Alpine && window.Alpine.version) {
 console.log('[FullCalendar] Script loaded, waiting for alpine:init');
 
 /**
- * Initialize on Alpine ready
- */
-document.addEventListener('alpine:init', () => {
-    console.log('[FullCalendar] Alpine:init event fired, registering component');
-    registerFullCalendar();
-});
-
-/**
- * Also initialize if Alpine is already loaded
- */
-if (window.Alpine && window.Alpine.version) {
-    console.log('[FullCalendar] Alpine already loaded, registering component immediately');
-    registerFullCalendar();
-}
-
-/**
- * Log that the script has loaded
- */
-console.log('[FullCalendar] Script loaded, waiting for alpine:init');
-
-/**
  * Export for external use
  */
 window.fullCalendarRefresh = function() {
     window.dispatchEvent(new Event('moonshineFullCalendarRefresh'));
+};
+
+/**
+ * Export locale utilities for external use
+ */
+window.fullCalendarGetLocale = function(localeCode) {
+    return getFullCalendarLocale(localeCode);
+};
+
+window.fullCalendarGetAvailableLocales = function() {
+    return getAvailableLocaleCodes();
 };
