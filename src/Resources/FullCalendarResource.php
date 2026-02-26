@@ -7,14 +7,18 @@ namespace Warete\MoonShineFullCalendar\Resources;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
+use MoonShine\Contracts\Core\DependencyInjection\CrudRequestContract;
 use MoonShine\Contracts\Core\DependencyInjection\CoreContract;
 use MoonShine\Contracts\UI\ActionButtonContract;
 use MoonShine\Crud\Buttons\DeleteButton;
 use MoonShine\Crud\Buttons\EditButton;
+use MoonShine\Crud\JsonResponse;
 use MoonShine\Laravel\Resources\ModelResource;
 use MoonShine\Laravel\TypeCasts\ModelDataWrapper;
 use MoonShine\Support\AlpineJs;
 use MoonShine\Support\Enums\HttpMethod;
+use MoonShine\Support\Enums\ToastType;
+use Symfony\Component\HttpFoundation\Response;
 
 /**
  * @template TData of Model
@@ -98,6 +102,8 @@ abstract class FullCalendarResource extends ModelResource
      * Top-level namespace for custom FullCalendar payload metadata inside extendedProps.
      */
     protected string $calendarEventPayloadKey = 'moonshineFullCalendar';
+
+    protected string $calendarEventDateUpdateIdPlaceholder = '__RESOURCE_ITEM__';
 
     public function __construct(CoreContract $core)
     {
@@ -733,6 +739,22 @@ abstract class FullCalendarResource extends ModelResource
         return $endpoint;
     }
 
+    public function getEventDatesUpdateEndpointTemplate(): string
+    {
+        $template = moonshineRouter()->to('full-calendar.events.dates.update', [
+            'resourceUri' => $this->getUriKey(),
+            'resourceItem' => $this->calendarEventDateUpdateIdPlaceholder,
+        ]);
+
+        $this->log('debug', 'Event dates update endpoint template built', [
+            'resourceUri' => $this->getUriKey(),
+            'template' => $template,
+            'placeholder' => $this->calendarEventDateUpdateIdPlaceholder,
+        ]);
+
+        return $template;
+    }
+
     /**
      * Get calendar configuration for Alpine.js
      */
@@ -749,6 +771,11 @@ abstract class FullCalendarResource extends ModelResource
                 'url' => $this->getEventsEndpoint(),
                 'method' => 'GET',
             ],
+            'eventDateUpdate' => [
+                'urlTemplate' => $this->getEventDatesUpdateEndpointTemplate(),
+                'method' => 'PATCH',
+                'idPlaceholder' => $this->calendarEventDateUpdateIdPlaceholder,
+            ],
         ], $this->calendarOptions);
 
         $this->log('debug', 'Calendar config generated', [
@@ -756,6 +783,179 @@ abstract class FullCalendarResource extends ModelResource
         ]);
 
         return $config;
+    }
+
+    /**
+     * @param array{start:string,end?:?string,allDay?:bool,action:string,timezone?:?string} $payload
+     */
+    public function updateCalendarEventDates(string $resourceItem, array $payload, ?CrudRequestContract $request = null): Response
+    {
+        $this->log('info', 'Calendar event date update requested', [
+            'resource' => $this->getUriKey(),
+            'resourceItem' => $resourceItem,
+            'payload' => $payload,
+        ]);
+
+        try {
+            $item = $this->resolveCalendarEventForDateUpdate($resourceItem);
+
+            [$start, $end] = $this->normalizeCalendarEventDateUpdatePayload($payload);
+
+            $oldStart = $item->getAttribute($this->startColumn);
+            $oldEnd = $item->getAttribute($this->endColumn);
+
+            $this->applyCalendarEventDateUpdate($item, $start, $end, $payload, $request);
+
+            $response = JsonResponse::make()
+                ->toast(__('moonshine::ui.saved'), ToastType::SUCCESS)
+                ->setStatusCode(Response::HTTP_OK);
+
+            $this->appendCalendarRefreshEvent($response, 'updateCalendarEventDates');
+
+            $this->log('info', 'Calendar event dates updated successfully', [
+                'resource' => $this->getUriKey(),
+                'resourceItem' => $resourceItem,
+                'startColumn' => $this->startColumn,
+                'endColumn' => $this->endColumn,
+                'oldStart' => $oldStart instanceof \DateTimeInterface ? $oldStart->format('c') : $oldStart,
+                'oldEnd' => $oldEnd instanceof \DateTimeInterface ? $oldEnd->format('c') : $oldEnd,
+                'newStart' => $start,
+                'newEnd' => $end,
+                'action' => $payload['action'] ?? null,
+            ]);
+
+            return $response;
+        } catch (\Throwable $e) {
+            $this->log('error', 'Calendar event date update failed', [
+                'resource' => $this->getUriKey(),
+                'resourceItem' => $resourceItem,
+                'payload' => $payload,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            $response = JsonResponse::make()
+                ->toast(
+                    $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface && $e->getMessage() !== ''
+                        ? $e->getMessage()
+                        : __('moonshine::ui.saved_error'),
+                    ToastType::ERROR
+                )
+                ->setStatusCode(
+                    $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface
+                        ? $e->getStatusCode()
+                        : Response::HTTP_INTERNAL_SERVER_ERROR
+                );
+
+            return $this->modifyErrorResponse($response, $e);
+        }
+    }
+
+    protected function resolveCalendarEventForDateUpdate(string $resourceItem): Model
+    {
+        $previousItem = $this->getItem();
+        $previousItemId = $this->getItemID();
+
+        $this->setItem(null);
+        $this->setItemID($resourceItem);
+        $wrapped = $this->findItem(orFail: true);
+
+        $item = $wrapped?->getOriginal();
+
+        if (! $item instanceof Model) {
+            $this->setItem($previousItem);
+            $this->setItemID($previousItemId);
+            abort(Response::HTTP_NOT_FOUND, 'Calendar event not found');
+        }
+
+        $this->setItem($item);
+
+        $this->log('debug', '[FIX][date-update] Event resolved via findItem', [
+            'resource' => $this->getUriKey(),
+            'resourceItem' => $resourceItem,
+            'resolved_id' => $item->getKey(),
+        ]);
+
+        return $item;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @return array{0:string,1:?string}
+     */
+    protected function normalizeCalendarEventDateUpdatePayload(array $payload): array
+    {
+        $start = $this->normalizeIncomingCalendarMutationDateTime((string) $payload['start']);
+        $end = isset($payload['end']) && $payload['end'] !== null && $payload['end'] !== ''
+            ? $this->normalizeIncomingCalendarMutationDateTime((string) $payload['end'])
+            : null;
+
+        if ($end !== null && $end < $start) {
+            $this->log('warning', 'Calendar event date update payload end precedes start', [
+                'start' => $start,
+                'end' => $end,
+                'payload' => $payload,
+            ]);
+
+            abort(Response::HTTP_UNPROCESSABLE_ENTITY, 'Event end date must be after start date');
+        }
+
+        $this->log('debug', 'Calendar event date update payload normalized', [
+            'start' => $start,
+            'end' => $end,
+            'timezone' => $payload['timezone'] ?? $this->timezone,
+            'action' => $payload['action'] ?? null,
+        ]);
+
+        return [$start, $end];
+    }
+
+    protected function normalizeIncomingCalendarMutationDateTime(string $value): string
+    {
+        $timezone = $this->timezone ?: config('app.timezone');
+
+        return Carbon::parse($value)->setTimezone($timezone)->format('Y-m-d H:i:s');
+    }
+
+    /**
+     * Default save implementation lives in the resource layer so consumers can override
+     * this method and reuse their own domain/resource persistence flow.
+     *
+     * @param array<string, mixed> $payload
+     */
+    protected function applyCalendarEventDateUpdate(
+        Model $item,
+        string $start,
+        ?string $end,
+        array $payload,
+        ?CrudRequestContract $request = null
+    ): void {
+        $item->setAttribute($this->startColumn, $start);
+        $item->setAttribute($this->endColumn, $end);
+
+        $this->setItemID($item->getKey());
+        $this->setItem($item);
+
+        if ($this->getFormPage() !== null) {
+            $this->setActivePage($this->getFormPage());
+        }
+
+        $saved = $this->save(
+            $this->getCaster()->cast($item)
+        );
+
+        $this->setItem($saved->getOriginal());
+
+        $this->log('info', '[FIX][date-update] Calendar event date update persisted via MoonShine resource save pipeline', [
+            'resource' => $this->getUriKey(),
+            'item_id' => $item->getKey(),
+            'startColumn' => $this->startColumn,
+            'endColumn' => $this->endColumn,
+            'start' => $start,
+            'end' => $end,
+            'action' => $payload['action'] ?? null,
+            'request_has_resource' => $request?->getResource() !== null,
+        ]);
     }
 
     /**

@@ -58,6 +58,36 @@ function getAvailableLocaleCodes() {
     return Object.keys(FULLCALENDAR_LOCALES);
 }
 
+function parseMoonShineEventString(eventsValue) {
+    if (!eventsValue || typeof eventsValue !== 'string') {
+        return [];
+    }
+
+    return eventsValue
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .map((entry) => {
+            const [eventNameRaw, attrsRaw] = entry.split('|');
+            const eventName = (eventNameRaw || '').trim().toLowerCase();
+            const detail = {};
+
+            if (attrsRaw) {
+                attrsRaw.split(';').forEach((pair) => {
+                    const [key, value] = pair.split('~');
+                    if (!key) {
+                        return;
+                    }
+
+                    detail[key.trim()] = value !== undefined ? value.trim() : '';
+                });
+            }
+
+            return { eventName, detail };
+        })
+        .filter((entry) => entry.eventName !== '');
+}
+
 /**
  * FullCalendar Alpine Component
  */
@@ -92,6 +122,7 @@ export function registerFullCalendar() {
         dropdownRepositionResizeHandler: null,
         dropdownAnchorEl: null,
         dropdownAnchorClickOffsetX: null,
+        pendingDateMutationByEventId: {},
 
         // Props
         config: props.config || {},
@@ -927,6 +958,190 @@ export function registerFullCalendar() {
             }
         },
 
+        getEventDateUpdateConfig() {
+            const eventDateUpdate = this.config?.eventDateUpdate || {};
+
+            return {
+                method: (eventDateUpdate.method || 'PATCH').toUpperCase(),
+                urlTemplate: eventDateUpdate.urlTemplate || '',
+                idPlaceholder: eventDateUpdate.idPlaceholder || '__RESOURCE_ITEM__',
+            };
+        },
+
+        buildEventDateUpdateUrl(eventId) {
+            const cfg = this.getEventDateUpdateConfig();
+
+            if (!cfg.urlTemplate) {
+                throw new Error('Calendar date update endpoint template is not configured');
+            }
+
+            const encodedId = encodeURIComponent(String(eventId));
+            const url = cfg.urlTemplate.replaceAll(cfg.idPlaceholder, encodedId);
+
+            if (url === cfg.urlTemplate) {
+                this.log('warn', '[event-dates-update] Placeholder was not replaced in URL template', {
+                    urlTemplate: cfg.urlTemplate,
+                    idPlaceholder: cfg.idPlaceholder,
+                    eventId,
+                });
+            }
+
+            return url;
+        },
+
+        buildAjaxHeaders() {
+            const headers = {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            };
+
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+            if (csrfToken) {
+                headers['X-CSRF-TOKEN'] = csrfToken;
+            }
+
+            return headers;
+        },
+
+        applyMoonShineJsonSideEffects(data, fallbackResource = null) {
+            if (!data || typeof data !== 'object') {
+                return;
+            }
+
+            const message = typeof data.message === 'string' ? data.message : null;
+            const messageType = typeof data.messageType === 'string' ? data.messageType : 'success';
+            const messageDuration = data.messageDuration ?? null;
+
+            if (message && window.MoonShine?.ui?.toast) {
+                window.MoonShine.ui.toast(message, messageType, messageDuration);
+            }
+
+            const events = parseMoonShineEventString(data.events);
+
+            this.log('debug', '[event-dates-update] Parsed MoonShine response events', {
+                eventsCount: events.length,
+                rawEvents: data.events || null,
+            });
+
+            if (events.length === 0 && fallbackResource) {
+                window.dispatchEvent(new CustomEvent('fullcalendar:refresh', {
+                    detail: { resource: fallbackResource },
+                }));
+                return;
+            }
+
+            events.forEach(({ eventName, detail }) => {
+                window.dispatchEvent(new CustomEvent(eventName, {
+                    detail,
+                    bubbles: true,
+                    composed: true,
+                    cancelable: true,
+                }));
+            });
+        },
+
+        async updateEventDatesFromCalendar(info, action) {
+            const eventId = String(info?.event?.id ?? '');
+
+            if (!eventId) {
+                this.log('error', '[event-dates-update] Missing event id', { action });
+                info?.revert?.();
+                return;
+            }
+
+            if (this.pendingDateMutationByEventId[eventId]) {
+                this.log('warn', '[event-dates-update] Duplicate mutation prevented', { eventId, action });
+                info?.revert?.();
+                return;
+            }
+
+            const payload = {
+                start: info.event.start ? info.event.start.toISOString() : null,
+                end: info.event.end ? info.event.end.toISOString() : null,
+                allDay: !!info.event.allDay,
+                action,
+                timezone: this.calendar?.getOption?.('timeZone') || this.config?.timezone || this.config?.timeZone || 'local',
+            };
+
+            if (!payload.start) {
+                this.log('error', '[event-dates-update] Missing event start in callback payload', {
+                    eventId,
+                    action,
+                });
+                info.revert();
+                return;
+            }
+
+            let url = '';
+            const method = this.getEventDateUpdateConfig().method;
+
+            try {
+                url = this.buildEventDateUpdateUrl(eventId);
+                this.pendingDateMutationByEventId[eventId] = true;
+
+                this.log('info', '[event-dates-update] Sending mutation request', {
+                    eventId,
+                    action,
+                    endpoint: url,
+                    method,
+                    payload,
+                    resourceUri: this.resourceUri,
+                });
+
+                const response = await fetch(url, {
+                    method,
+                    headers: this.buildAjaxHeaders(),
+                    body: JSON.stringify(payload),
+                });
+
+                let responseData = null;
+                try {
+                    responseData = await response.json();
+                } catch (parseError) {
+                    this.log('warn', '[event-dates-update] Failed to parse response JSON', {
+                        eventId,
+                        action,
+                        endpoint: url,
+                        error: parseError.message,
+                    });
+                }
+
+                this.log('debug', '[event-dates-update] Mutation response received', {
+                    eventId,
+                    action,
+                    status: response.status,
+                    ok: response.ok,
+                    hasMessage: !!responseData?.message,
+                    hasEvents: !!responseData?.events,
+                });
+
+                if (!response.ok) {
+                    throw new Error(responseData?.message || `HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                this.applyMoonShineJsonSideEffects(responseData, this.resourceUri);
+            } catch (error) {
+                this.log('error', '[event-dates-update] Mutation request failed, reverting event', {
+                    eventId,
+                    action,
+                    endpoint: url,
+                    payload,
+                    error: error.message,
+                    stack: error.stack,
+                });
+
+                info.revert();
+                this.error = error.message;
+
+                if (window.MoonShine?.ui?.toast) {
+                    window.MoonShine.ui.toast(error.message || 'Update failed', 'error');
+                }
+            } finally {
+                delete this.pendingDateMutationByEventId[eventId];
+            }
+        },
+
         /**
          * Fetch events from API using standard fetch with CSRF token
          * MoonShine.request is not suitable because it doesn't return data directly
@@ -1158,6 +1373,9 @@ export function registerFullCalendar() {
                 newEnd: info.event.end ? info.event.end.toISOString() : null
             });
 
+            this.closeEventActionsDropdown('event-drop');
+            this.updateEventDatesFromCalendar(info, 'drop');
+
             if (window.moonshineFullCalendarEventDrop) {
                 window.moonshineFullCalendarEventDrop(info);
             }
@@ -1172,6 +1390,9 @@ export function registerFullCalendar() {
                 newStart: info.event.start.toISOString(),
                 newEnd: info.event.end ? info.event.end.toISOString() : null
             });
+
+            this.closeEventActionsDropdown('event-resize');
+            this.updateEventDatesFromCalendar(info, 'resize');
 
             if (window.moonshineFullCalendarEventResize) {
                 window.moonshineFullCalendarEventResize(info);
