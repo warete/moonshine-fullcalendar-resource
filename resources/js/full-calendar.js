@@ -72,10 +72,15 @@ export function registerFullCalendar() {
         loading: false,
         error: null,
         events: [],
+        dayViewRenderRecoveryAttempted: false,
+        refreshListenerHandler: null,
+        refreshListenerAbortController: null,
+        refreshListenerObserver: null,
 
         // Props
         config: props.config || {},
         endpoint: props.endpoint || '',
+        resourceUri: props.resourceUri || null,
         async: props.async !== undefined ? props.async : false,
         debug: props.debug || false,
         currentLocale: props.config?.locale || 'en',
@@ -117,23 +122,32 @@ export function registerFullCalendar() {
                 'local': Intl.DateTimeFormat().resolvedOptions().timeZone
             });
 
+            // Normalize incoming config from PHP (legacy `timezone` -> FullCalendar `timeZone`)
+            const normalizedConfig = { ...this.config };
+            if (Object.prototype.hasOwnProperty.call(normalizedConfig, 'timezone')) {
+                this.log('info', '[FIX] Removing unsupported FullCalendar option `timezone`', {
+                    timezone: normalizedConfig.timezone
+                });
+                delete normalizedConfig.timezone;
+            }
+
             // Build FullCalendar config
             const calendarConfig = {
-                ...this.config,
+                ...normalizedConfig,
                 plugins: [dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin],
-                initialView: this.config.initialView || 'dayGridMonth',
-                headerToolbar: this.config.headerToolbar || {
+                initialView: normalizedConfig.initialView || 'dayGridMonth',
+                headerToolbar: normalizedConfig.headerToolbar || {
                     left: 'prev,next today',
                     center: 'title',
                     right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'
                 },
-                editable: this.config.editable !== undefined ? this.config.editable : false,
-                selectable: this.config.selectable !== undefined ? this.config.selectable : true,
+                editable: normalizedConfig.editable !== undefined ? normalizedConfig.editable : false,
+                selectable: normalizedConfig.selectable !== undefined ? normalizedConfig.selectable : true,
                 locale: localeObj, // Use locale object from registry
                 // [FIX] Support both timeZone and timezone (PHP convention) - use 'local' if not set
                 // If timezone is set, use it as IANA timezone (e.g., 'Europe/Moscow', 'UTC')
                 // FullCalendar will parse event times and display in this timezone
-                timeZone: this.config.timeZone || this.config.timezone || 'local',
+                timeZone: normalizedConfig.timeZone || this.config.timezone || 'local',
 
                 // Event handlers
                 events: this.fetchEvents.bind(this),
@@ -168,12 +182,312 @@ export function registerFullCalendar() {
                     view: this.calendar.view.type,
                     locale: this.currentLocale
                 });
+
+                // Setup event listener for calendar refresh after CRUD operations
+                this.setupRefreshListener();
+                this.applyInitialLayoutFix('init');
             } catch (error) {
                 this.log('error', 'Failed to initialize FullCalendar', {
                     error: error.message,
                     stack: error.stack
                 });
                 this.error = error.message;
+            }
+        },
+
+        teardownRefreshListener(reason = 'unknown') {
+            if (this.refreshListenerAbortController) {
+                this.log('info', '[FIX][refresh] Tearing down refresh listeners via AbortController', { reason });
+                this.refreshListenerAbortController.abort();
+                this.refreshListenerAbortController = null;
+            } else if (this.refreshListenerHandler) {
+                this.log('info', '[FIX][refresh] Tearing down refresh listeners (fallback removeEventListener)', { reason });
+                window.removeEventListener('fullcalendar:refresh', this.refreshListenerHandler);
+                document.removeEventListener('fullcalendar:refresh', this.refreshListenerHandler);
+            }
+
+            this.refreshListenerHandler = null;
+
+            if (this.refreshListenerObserver) {
+                this.refreshListenerObserver.disconnect();
+                this.refreshListenerObserver = null;
+            }
+        },
+
+        setupRefreshListenerAutoCleanup() {
+            if (this.refreshListenerObserver || typeof MutationObserver === 'undefined') {
+                return;
+            }
+
+            this.refreshListenerObserver = new MutationObserver(() => {
+                if (!this.$el || this.$el.isConnected) {
+                    return;
+                }
+
+                this.teardownRefreshListener('element-disconnected');
+            });
+
+            this.refreshListenerObserver.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
+        },
+
+        /**
+         * FullCalendar timeGridDay can render before layout is fully settled (x-cloak/async containers).
+         * Force a delayed size recalculation to avoid "events loaded but not visible" on first render.
+         */
+        applyInitialLayoutFix(reason = 'unknown') {
+            if (!this.calendar) {
+                return;
+            }
+
+            const applyFix = (phase) => {
+                if (!this.calendar) {
+                    return;
+                }
+
+                const viewType = this.calendar.view?.type;
+                if (viewType !== 'timeGridDay') {
+                    this.log('debug', '[FIX][layout] Skip layout fix for non-timeGridDay view', {
+                        reason,
+                        phase,
+                        viewType
+                    });
+                    return;
+                }
+
+                this.log('info', '[FIX][layout] Applying timeGridDay layout refresh', {
+                    reason,
+                    phase,
+                    viewType,
+                    eventCount: this.calendar.getEvents().length
+                });
+
+                try {
+                    this.calendar.updateSize();
+                    this.calendar.render();
+                } catch (error) {
+                    this.log('error', '[FIX][layout] Failed to apply layout refresh', {
+                        reason,
+                        phase,
+                        error: error.message,
+                        stack: error.stack
+                    });
+                }
+
+                this.ensureTimeGridDayEventsRendered(`[layout:${reason}:${phase}]`);
+            };
+
+            requestAnimationFrame(() => {
+                applyFix('raf-1');
+                requestAnimationFrame(() => applyFix('raf-2'));
+            });
+
+            setTimeout(() => applyFix('timeout-50ms'), 50);
+            setTimeout(() => applyFix('timeout-250ms'), 250);
+        },
+
+        /**
+         * Recovery for a flaky initial timeGridDay render:
+         * events are parsed but no timeGrid DOM nodes appear until manual view switch.
+         */
+        ensureTimeGridDayEventsRendered(reason = 'unknown') {
+            if (!this.calendar) {
+                return;
+            }
+
+            const viewType = this.calendar.view?.type;
+            if (viewType !== 'timeGridDay') {
+                return;
+            }
+
+            const parsedEvents = this.calendar.getEvents();
+            const timeGridEvents = this.$el?.querySelectorAll?.('.fc-timegrid-event')?.length ?? 0;
+            const allDayEvents = this.$el?.querySelectorAll?.('.fc-daygrid-event, .fc-timegrid-allday .fc-event')?.length ?? 0;
+
+            this.log('info', '[FIX][day-view] Render probe', {
+                reason,
+                parsedCount: parsedEvents.length,
+                timeGridDomCount: timeGridEvents,
+                allDayDomCount: allDayEvents,
+                recoveryAttempted: this.dayViewRenderRecoveryAttempted
+            });
+
+            if (parsedEvents.length === 0 || timeGridEvents > 0 || this.dayViewRenderRecoveryAttempted) {
+                return;
+            }
+
+            this.dayViewRenderRecoveryAttempted = true;
+
+            const currentDate = this.calendar.getDate();
+            const parsedSample = parsedEvents.slice(0, 3).map((event) => ({
+                id: event.id,
+                title: event.title,
+                start: event.start ? event.start.toISOString() : null,
+                end: event.end ? event.end.toISOString() : null,
+                allDay: event.allDay
+            }));
+
+            this.log('warn', '[FIX][day-view] Parsed events exist but no timeGrid DOM events rendered; forcing view reapply', {
+                reason,
+                currentDate: currentDate?.toISOString?.() || null,
+                parsedSample
+            });
+
+            try {
+                this.calendar.changeView('timeGridDay', currentDate);
+
+                requestAnimationFrame(() => {
+                    this.calendar?.updateSize?.();
+                    this.log('info', '[FIX][day-view] View reapply complete', {
+                        reason,
+                        timeGridDomCountAfter: this.$el?.querySelectorAll?.('.fc-timegrid-event')?.length ?? 0
+                    });
+                });
+            } catch (error) {
+                this.log('error', '[FIX][day-view] View reapply failed', {
+                    reason,
+                    error: error.message,
+                    stack: error.stack
+                });
+            }
+        },
+
+        /**
+         * Setup event listener for calendar refresh events from MoonShine
+         * Listens for 'fullcalendar:refresh' custom event dispatched by modifySaveResponse
+         */
+        setupRefreshListener() {
+            const self = this;
+
+            // Prevent duplicate listeners on repeated init/re-render of the same component instance
+            this.teardownRefreshListener('re-register');
+
+            // Extract resource URI from endpoint URL for filtering
+            const resourceUri = this.resourceUri || this.getResourceUriFromEndpoint();
+
+            this.log('info', '[refresh] Setting up calendar refresh listener', {
+                resourceUri: resourceUri,
+                endpoint: this.endpoint,
+                resourceUriSource: this.resourceUri ? 'props.resourceUri' : 'endpoint'
+            });
+
+            const handleRefreshEvent = (event) => {
+                self.log('info', '[refresh] Refresh event received', {
+                    eventType: event.type,
+                    detail: event.detail
+                });
+
+                // If no resource is provided, treat as broadcast refresh for all calendars
+                if (!event.detail || !event.detail.resource) {
+                    self.log('info', '[FIX][refresh] Broadcast refresh event received', {
+                        detail: event.detail || null
+                    });
+
+                    if (self.calendar) {
+                        self.calendar.refetchEvents();
+                    } else {
+                        self.log('warn', '[FIX][refresh] Cannot refresh on broadcast: calendar not initialized');
+                    }
+
+                    return;
+                }
+
+                // Check if this event is for this calendar instance
+                if (event.detail && event.detail.resource) {
+                    const eventResource = String(event.detail.resource).trim();
+                    const normalizedCalendarResource = resourceUri ? String(resourceUri).trim() : null;
+
+                    self.log('info', '[refresh] Checking resource match', {
+                        eventResource: eventResource,
+                        calendarResource: normalizedCalendarResource,
+                        matches: eventResource === normalizedCalendarResource
+                    });
+
+                    if (!normalizedCalendarResource) {
+                        self.log('warn', '[FIX][refresh] Calendar resource URI is unknown, applying fallback refresh', {
+                            eventResource: eventResource,
+                            endpoint: self.endpoint
+                        });
+
+                        if (self.calendar) {
+                            self.calendar.refetchEvents();
+                        }
+
+                        return;
+                    }
+
+                    // Only refresh if this event is for this calendar
+                    if (eventResource === normalizedCalendarResource) {
+                        self.log('info', '[refresh] Resource match detected, refreshing calendar');
+
+                        // Call refetchEvents
+                        if (self.calendar) {
+                            const beforeCount = self.calendar.getEvents().length;
+                            self.log('info', '[refresh] Before refetch', { eventCount: beforeCount });
+
+                            self.calendar.refetchEvents();
+
+                            // Log after refetch (async, so use timeout)
+                            setTimeout(() => {
+                                const afterCount = self.calendar.getEvents().length;
+                                self.log('info', '[refresh] After refetch', { eventCount: afterCount });
+                            }, 500);
+                        } else {
+                            self.log('warn', '[refresh] Cannot refresh: calendar not initialized');
+                        }
+                    } else {
+                        self.log('debug', '[FIX][refresh] Skipping refresh - resource mismatch', {
+                            event: eventResource,
+                            current: normalizedCalendarResource
+                        });
+                    }
+                }
+            };
+
+            this.refreshListenerHandler = handleRefreshEvent;
+
+            // MoonShine dispatches browser events via global dispatchEvent (window target).
+            // Also register on document for compatibility with manual/custom dispatches.
+            if (typeof AbortController !== 'undefined') {
+                this.refreshListenerAbortController = new AbortController();
+                const signal = this.refreshListenerAbortController.signal;
+
+                window.addEventListener('fullcalendar:refresh', handleRefreshEvent, { signal });
+                document.addEventListener('fullcalendar:refresh', handleRefreshEvent, { signal });
+            } else {
+                window.addEventListener('fullcalendar:refresh', handleRefreshEvent);
+                document.addEventListener('fullcalendar:refresh', handleRefreshEvent);
+            }
+
+            this.setupRefreshListenerAutoCleanup();
+
+            this.log('info', '[FIX][refresh] Calendar refresh listener registered', {
+                targets: ['window', 'document']
+            });
+        },
+
+        /**
+         * Extract resource URI from endpoint URL
+         * Endpoint format: /admin/resource/{resourceUri}/full-calendar/events
+         */
+        getResourceUriFromEndpoint() {
+            try {
+                const url = new URL(this.endpoint, window.location.origin);
+                const pathParts = url.pathname.split('/');
+                // Find 'resource' in path and get the next segment
+                const resourceIndex = pathParts.indexOf('resource');
+                if (resourceIndex !== -1 && resourceIndex + 1 < pathParts.length) {
+                    return pathParts[resourceIndex + 1];
+                }
+                return null;
+            } catch (error) {
+                this.log('warn', '[refresh] Failed to extract resource URI from endpoint', {
+                    endpoint: this.endpoint,
+                    error: error.message
+                });
+                return null;
             }
         },
 
@@ -243,6 +557,58 @@ export function registerFullCalendar() {
 
                 this.events = events;
                 successCallback(events);
+
+                if (this.calendar?.view?.type === 'timeGridDay') {
+                    const activeStart = this.calendar.view.activeStart?.toISOString?.() || null;
+                    const activeEnd = this.calendar.view.activeEnd?.toISOString?.() || null;
+                    const parsedSample = this.calendar.getEvents().slice(0, 3).map((event) => ({
+                        id: event.id,
+                        title: event.title,
+                        start: event.start ? event.start.toISOString() : null,
+                        end: event.end ? event.end.toISOString() : null,
+                        allDay: event.allDay,
+                        display: event.display,
+                        overlapCurrentDay: (() => {
+                            try {
+                                const eventStart = event.start ? event.start.getTime() : null;
+                                const eventEnd = event.end ? event.end.getTime() : eventStart;
+                                const rangeStart = activeStart ? new Date(activeStart).getTime() : null;
+                                const rangeEnd = activeEnd ? new Date(activeEnd).getTime() : null;
+
+                                if (eventStart === null || rangeStart === null || rangeEnd === null) {
+                                    return null;
+                                }
+
+                                return eventStart < rangeEnd && (eventEnd ?? eventStart) > rangeStart;
+                            } catch (e) {
+                                return null;
+                            }
+                        })()
+                    }));
+                    const rawSample = events.slice(0, 3).map((event) => ({
+                        id: event.id ?? null,
+                        title: event.title ?? null,
+                        start: event.start ?? null,
+                        end: event.end ?? null,
+                        allDay: event.allDay ?? null,
+                        display: event.display ?? null,
+                    }));
+
+                    this.log('info', '[FIX][day-view] Events loaded in timeGridDay', {
+                        activeStart,
+                        activeEnd,
+                        fetchedCount: events.length,
+                        parsedCount: this.calendar.getEvents().length,
+                        parsedSample,
+                        rawSample,
+                        parsedSampleJson: JSON.stringify(parsedSample),
+                        rawSampleJson: JSON.stringify(rawSample)
+                    });
+                }
+
+                this.applyInitialLayoutFix('events-loaded');
+                setTimeout(() => this.ensureTimeGridDayEventsRendered('events-loaded-post-check'), 10);
+                setTimeout(() => this.ensureTimeGridDayEventsRendered('events-loaded-post-check-100ms'), 100);
 
                 this.log('info', 'Events loaded successfully', {
                     count: events.length
@@ -456,8 +822,15 @@ console.log('[FullCalendar] Script loaded, waiting for alpine:init');
 /**
  * Export for external use
  */
-window.fullCalendarRefresh = function() {
-    window.dispatchEvent(new Event('moonshineFullCalendarRefresh'));
+window.fullCalendarRefresh = function(resource = null) {
+    console.info('[FIX] fullCalendarRefresh dispatch', {
+        event: 'fullcalendar:refresh',
+        resource: resource
+    });
+
+    window.dispatchEvent(new CustomEvent('fullcalendar:refresh', {
+        detail: resource ? { resource } : {}
+    }));
 };
 
 /**

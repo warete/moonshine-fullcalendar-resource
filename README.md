@@ -199,6 +199,81 @@ FULLCALENDAR_LOG_LEVEL=debug
 FULLCALENDAR_DEBUG=true
 ```
 
+## Auto-Refresh After CRUD Operations
+
+The calendar automatically refreshes after creating and updating events through MoonShine modal forms. This is handled through a custom event system.
+
+### How It Works
+
+1. **PHP Side:** When a calendar event is saved via modal, the `modifySaveResponse()` method adds a `fullcalendar:refresh` event to the response
+2. **JavaScript Side:** The calendar component listens for this event and refetches events automatically
+3. **Resource Filtering:** Events are filtered by resource URI, so only the relevant calendar refreshes
+
+### Event Format
+
+```php
+// MoonShine event format: eventName|key1~value1
+fullcalendar:refresh|resource~events
+```
+
+### Customization
+
+#### Disable Auto-Refresh
+
+Override `modifySaveResponse` in your resource to return the response without events:
+
+```php
+public function modifySaveResponse(\MoonShine\Crud\JsonResponse $response): \MoonShine\Crud\JsonResponse
+{
+    // Return response without adding refresh event
+    return $response;
+}
+```
+
+#### Custom Refresh Logic
+
+Override `modifySaveResponse` to add custom behavior:
+
+```php
+public function modifySaveResponse(\MoonShine\Crud\JsonResponse $response): \MoonShine\Crud\JsonResponse
+{
+    $response = parent::modifySaveResponse($response);
+
+    // Add your custom logic here
+    // For example: send notifications, update related data, etc.
+
+    return $response;
+}
+```
+
+#### Manual Refresh
+
+Trigger a calendar refresh manually from JavaScript:
+
+```javascript
+// Refresh all calendar instances
+window.fullCalendarRefresh();
+
+// Or dispatch the event directly with parameters
+document.dispatchEvent(new CustomEvent('fullcalendar:refresh', {
+    detail: { resource: 'events' }
+}));
+```
+
+### Debugging
+
+Enable debug logging to see refresh event flow:
+
+```env
+FULLCALENDAR_LOG_LEVEL=debug
+FULLCALENDAR_DEBUG=true
+```
+
+Console logs will show:
+- `[refresh] Setting up calendar refresh listener`
+- `[refresh] Refresh event received`
+- `[refresh] Resource match detected, refreshing calendar`
+
 ## API Reference
 
 ### FullCalendarResource

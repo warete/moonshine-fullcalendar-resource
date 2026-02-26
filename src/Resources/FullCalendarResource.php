@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Warete\MoonShineFullCalendar\Resources;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use MoonShine\Contracts\Core\DependencyInjection\CoreContract;
 use MoonShine\Laravel\Resources\ModelResource;
+use MoonShine\Support\AlpineJs;
 
 /**
  * @template TData of Model
@@ -90,7 +92,7 @@ abstract class FullCalendarResource extends ModelResource
             'class' => static::class,
             'model' => $this->model ?? 'not set',
             'defaultView' => $this->defaultView,
-            'timezone' => $this->timezone,
+            'timeZone' => $this->timezone,
         ]);
 
         parent::__construct($core);
@@ -165,21 +167,30 @@ abstract class FullCalendarResource extends ModelResource
 
         $query = $this->getQuery();
 
+        $normalizedStart = $this->normalizeQueryDateTime($start);
+        $normalizedEnd = $this->normalizeQueryDateTime($end);
+
         // Apply date range filtering if provided
-        if ($start && $end) {
-            $query->where(function ($q) use ($start, $end) {
-                // Events that overlap with the range
-                $q->whereBetween($this->startColumn, [$start, $end])
-                    ->orWhereBetween($this->endColumn, [$start, $end])
-                    ->orWhere(function ($q) use ($start, $end) {
-                        $q->where($this->startColumn, '<=', $start)
-                            ->where($this->endColumn, '>=', $end);
-                    });
+        if ($normalizedStart && $normalizedEnd) {
+            $query->where(function ($q) use ($normalizedStart, $normalizedEnd) {
+                // FullCalendar end is exclusive. Select events that overlap [start, end).
+                $q->where(function ($q) use ($normalizedStart, $normalizedEnd) {
+                    $q->where($this->startColumn, '<', $normalizedEnd)
+                        ->where($this->endColumn, '>', $normalizedStart);
+                })->orWhere(function ($q) use ($normalizedStart, $normalizedEnd) {
+                    // Fallback for records without end date: point-in-time events by start only
+                    $q->whereNull($this->endColumn)
+                        ->where($this->startColumn, '>=', $normalizedStart)
+                        ->where($this->startColumn, '<', $normalizedEnd);
+                });
             });
 
-            $this->log('debug', 'Date range filter applied', [
-                'start' => $start,
-                'end' => $end,
+            $this->log('info', '[FIX][query-range] Date range filter applied', [
+                'rawStart' => $start,
+                'rawEnd' => $end,
+                'normalizedStart' => $normalizedStart,
+                'normalizedEnd' => $normalizedEnd,
+                'timezone' => $this->timezone,
             ]);
         }
 
@@ -207,6 +218,37 @@ abstract class FullCalendarResource extends ModelResource
         ]);
 
         return $items;
+    }
+
+    /**
+     * Normalize FullCalendar ISO8601 query boundary to DB-friendly datetime string.
+     */
+    protected function normalizeQueryDateTime(?string $value): ?string
+    {
+        if ($value === null || trim($value) === '') {
+            return null;
+        }
+
+        try {
+            $timezone = $this->timezone ?: config('app.timezone');
+            $normalized = Carbon::parse($value)->setTimezone($timezone)->format('Y-m-d H:i:s');
+
+            $this->log('debug', '[FIX][query-range] Query datetime normalized', [
+                'input' => $value,
+                'timezone' => $timezone,
+                'output' => $normalized,
+            ]);
+
+            return $normalized;
+        } catch (\Throwable $e) {
+            $this->log('warning', '[FIX][query-range] Failed to normalize query datetime, using raw value', [
+                'input' => $value,
+                'timezone' => $this->timezone,
+                'error' => $e->getMessage(),
+            ]);
+
+            return $value;
+        }
     }
 
     /**
@@ -280,7 +322,20 @@ abstract class FullCalendarResource extends ModelResource
         }
 
         if (is_string($value)) {
-            return $value;
+            try {
+                $timezone = $this->timezone ?: config('app.timezone');
+                $parsed = Carbon::parse($value, $timezone);
+
+                return $parsed->format('c');
+            } catch (\Throwable $e) {
+                $this->log('warning', '[FIX][formatDateTime] Failed to normalize date string, returning raw value', [
+                    'value' => $value,
+                    'timezone' => $this->timezone,
+                    'error' => $e->getMessage(),
+                ]);
+
+                return $value;
+            }
         }
 
         return null;
@@ -472,5 +527,41 @@ abstract class FullCalendarResource extends ModelResource
         );
 
         Log::log($level, $logMessage, $context);
+    }
+
+    /**
+     * Modify save response to dispatch calendar refresh event
+     * This is called by MoonShine after successful create/update operations
+     *
+     * @param \MoonShine\Crud\JsonResponse $response The original response
+     * @return \MoonShine\Crud\JsonResponse Modified response with refresh event
+     */
+    public function modifySaveResponse(\MoonShine\Crud\JsonResponse $response): \MoonShine\Crud\JsonResponse
+    {
+        $this->log('info', '[modifySaveResponse] Adding calendar refresh event', [
+            'resource' => $this->getUriKey(),
+        ]);
+
+        try {
+            $resourceUri = $this->getUriKey();
+
+            $refreshEvent = AlpineJs::event('fullcalendar:refresh', null, [
+                'resource' => $resourceUri,
+            ]);
+
+            $this->log('info', '[modifySaveResponse] Calendar refresh event added', [
+                'event' => $refreshEvent,
+                'resource' => $resourceUri,
+            ]);
+
+            $response->events([$refreshEvent]);
+        } catch (\Throwable $e) {
+            $this->log('error', '[modifySaveResponse] Failed to add refresh event', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+        }
+
+        return $response;
     }
 }
