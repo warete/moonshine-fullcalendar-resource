@@ -8,8 +8,13 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use MoonShine\Contracts\Core\DependencyInjection\CoreContract;
+use MoonShine\Contracts\UI\ActionButtonContract;
+use MoonShine\Crud\Buttons\DeleteButton;
+use MoonShine\Crud\Buttons\EditButton;
 use MoonShine\Laravel\Resources\ModelResource;
+use MoonShine\Laravel\TypeCasts\ModelDataWrapper;
 use MoonShine\Support\AlpineJs;
+use MoonShine\Support\Enums\HttpMethod;
 
 /**
  * @template TData of Model
@@ -21,6 +26,12 @@ use MoonShine\Support\AlpineJs;
  */
 abstract class FullCalendarResource extends ModelResource
 {
+    /**
+     * Calendar resources usually need async modal editing for event-click actions.
+     * Consumers can opt out by overriding this property in their resource.
+     */
+    protected bool $editInModal = true;
+
     /**
      * FullCalendar view modes
      */
@@ -83,6 +94,11 @@ abstract class FullCalendarResource extends ModelResource
      */
     protected string $endColumn = 'end';
 
+    /**
+     * Top-level namespace for custom FullCalendar payload metadata inside extendedProps.
+     */
+    protected string $calendarEventPayloadKey = 'moonshineFullCalendar';
+
     public function __construct(CoreContract $core)
     {
         $this->logLevel = config('fullcalendar.log_level', env('FULLCALENDAR_LOG_LEVEL', 'info'));
@@ -131,11 +147,22 @@ abstract class FullCalendarResource extends ModelResource
 
             $formatted = [];
             foreach ($items as $item) {
-                $formatted[] = $this->formatEvent($item);
+                $formattedEvent = $this->formatEvent($item);
+                $formatted[] = $this->ensureCalendarEventActionsPayload($formattedEvent, $item);
             }
 
-            $this->log('debug', 'Events formatted', [
+            $eventsWithActions = 0;
+            foreach ($formatted as $event) {
+                $actions = $event['extendedProps'][$this->calendarEventPayloadKey]['actions'] ?? null;
+                if (is_array($actions) && (($actions['hasActions'] ?? false) === true)) {
+                    $eventsWithActions++;
+                }
+            }
+
+            $this->log('info', 'Events formatted with actions payload', [
                 'formatted_count' => count($formatted),
+                'events_with_actions' => $eventsWithActions,
+                'resource' => $this->getUriKey(),
             ]);
 
             return $formatted;
@@ -296,13 +323,69 @@ abstract class FullCalendarResource extends ModelResource
             }
         }
 
-        if (!empty($extendedProps)) {
-            $event['extendedProps'] = $extendedProps;
-        }
+        $eventActionsPayload = $this->buildCalendarEventActionsPayload($item);
+
+        $extendedProps[$this->calendarEventPayloadKey] = [
+            'actions' => $eventActionsPayload,
+        ];
+
+        $event['extendedProps'] = $extendedProps;
 
         $this->log('debug', 'Event formatted', [
             'event_id' => $event['id'],
             'event_title' => $event['title'],
+            'actions_count' => $eventActionsPayload['count'],
+            'actions_has' => $eventActionsPayload['hasActions'],
+        ]);
+
+        return $event;
+    }
+
+    /**
+     * Ensure actions payload exists even when a consumer resource overrides formatEvent()
+     * and does not call parent::formatEvent().
+     *
+     * @param array<string, mixed> $event
+     * @return array<string, mixed>
+     */
+    protected function ensureCalendarEventActionsPayload(array $event, Model $item): array
+    {
+        $existingActions = $event['extendedProps'][$this->calendarEventPayloadKey]['actions'] ?? null;
+
+        if (is_array($existingActions)) {
+            $this->log('info', '[FIX][event-actions] Existing actions payload preserved', [
+                'item_id' => $item->getKey(),
+                'resource' => $this->getUriKey(),
+                'has_actions' => (bool) ($existingActions['hasActions'] ?? false),
+                'count' => (int) ($existingActions['count'] ?? 0),
+            ]);
+
+            return $event;
+        }
+
+        $payload = $this->buildCalendarEventActionsPayload($item);
+
+        $extendedProps = $event['extendedProps'] ?? [];
+        if (!is_array($extendedProps)) {
+            $this->log('warning', '[FIX][event-actions] Invalid extendedProps type, resetting to array', [
+                'item_id' => $item->getKey(),
+                'resource' => $this->getUriKey(),
+                'type' => get_debug_type($extendedProps),
+            ]);
+            $extendedProps = [];
+        }
+
+        $extendedProps[$this->calendarEventPayloadKey] = [
+            'actions' => $payload,
+        ];
+
+        $event['extendedProps'] = $extendedProps;
+
+        $this->log('info', '[FIX][event-actions] Actions payload injected after formatEvent', [
+            'item_id' => $item->getKey(),
+            'resource' => $this->getUriKey(),
+            'has_actions' => $payload['hasActions'],
+            'count' => $payload['count'],
         ]);
 
         return $event;
@@ -366,6 +449,266 @@ abstract class FullCalendarResource extends ModelResource
         }
 
         return false;
+    }
+
+    /**
+     * Build a stable actions payload for a single calendar event.
+     *
+     * Contract (under `extendedProps.<calendarEventPayloadKey>.actions`):
+     * - `version` (int)
+     * - `html` (string)
+     * - `count` (int)
+     * - `hasActions` (bool)
+     *
+     * @return array{version:int,html:string,count:int,hasActions:bool}
+     */
+    protected function buildCalendarEventActionsPayload(Model $item): array
+    {
+        try {
+            $renderedButtons = $this->renderCalendarEventActionsHtml($item);
+
+            $payload = [
+                'version' => 1,
+                'html' => implode('', $renderedButtons),
+                'count' => count($renderedButtons),
+                'hasActions' => count($renderedButtons) > 0,
+            ];
+
+            $this->log('info', 'Calendar event actions payload built', [
+                'item_id' => $item->getKey(),
+                'resource' => $this->getUriKey(),
+                'actions_count' => $payload['count'],
+                'has_actions' => $payload['hasActions'],
+            ]);
+
+            return $payload;
+        } catch (\Throwable $e) {
+            $this->log('error', 'Failed to build calendar event actions payload', [
+                'item_id' => $item->getKey(),
+                'resource' => $this->getUriKey(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return [
+                'version' => 1,
+                'html' => '',
+                'count' => 0,
+                'hasActions' => false,
+            ];
+        }
+    }
+
+    /**
+     * @return list<ActionButtonContract|string>
+     */
+    protected function getCalendarEventActions(Model $item): array
+    {
+        $defaultActions = $this->getDefaultCalendarEventActions($item);
+        $customActions = $this->normalizeCustomCalendarEventActions($this->getCustomCalendarEventActions($item), $item);
+        $actions = [...$defaultActions, ...$customActions];
+
+        $this->log('info', 'Calendar event actions composed', [
+            'item_id' => $item->getKey(),
+            'default_count' => count($defaultActions),
+            'custom_count' => count($customActions),
+            'total_count' => count($actions),
+        ]);
+
+        return $actions;
+    }
+
+    /**
+     * Override to append custom per-event action buttons.
+     *
+     * Supported values:
+     * - `ActionButtonContract`
+     * - raw HTML `string`
+     * - iterable of the above
+     *
+     * @return iterable<ActionButtonContract|string>|ActionButtonContract|string|null
+     */
+    protected function getCustomCalendarEventActions(Model $item): iterable|ActionButtonContract|string|null
+    {
+        return [];
+    }
+
+    /**
+     * @return list<ActionButtonContract>
+     */
+    protected function getDefaultCalendarEventActions(Model $item): array
+    {
+        $wrapped = new ModelDataWrapper($item);
+
+        try {
+            $this->setItem($item);
+        } catch (\Throwable $e) {
+            $this->log('warning', 'Failed to set resource item before building actions', [
+                'item_id' => $item->getKey(),
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        $actions = [];
+
+        try {
+            $editButton = EditButton::for($this, isAsync: true)
+                ->setData($wrapped);
+
+            $this->log('info', 'Default edit action composed', [
+                'item_id' => $item->getKey(),
+                'resource' => $this->getUriKey(),
+                'editInModal' => $this->isEditInModal(),
+                'isAsync' => method_exists($editButton, 'isAsync') ? $editButton->isAsync() : null,
+            ]);
+
+            $actions[] = $this->ensureCalendarActionIsAsync($editButton, $item, 'edit');
+        } catch (\Throwable $e) {
+            $this->log('warning', 'Default edit action unavailable', [
+                'item_id' => $item->getKey(),
+                'resource' => $this->getUriKey(),
+                'editInModal' => $this->isEditInModal(),
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        try {
+            $deleteButton = DeleteButton::for($this, isAsync: true)
+                ->setData($wrapped);
+
+            $actions[] = $this->ensureCalendarActionIsAsync($deleteButton, $item, 'delete');
+        } catch (\Throwable $e) {
+            $this->log('warning', 'Default delete action unavailable', [
+                'item_id' => $item->getKey(),
+                'resource' => $this->getUriKey(),
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return array_values(array_filter($actions, static fn ($action): bool => $action instanceof ActionButtonContract));
+    }
+
+    /**
+     * @param iterable<ActionButtonContract|string>|ActionButtonContract|string|null $actions
+     * @return list<ActionButtonContract|string>
+     */
+    protected function normalizeCustomCalendarEventActions(iterable|ActionButtonContract|string|null $actions, Model $item): array
+    {
+        if ($actions === null) {
+            return [];
+        }
+
+        $list = [];
+        $source = $actions;
+
+        if ($actions instanceof ActionButtonContract || is_string($actions)) {
+            $source = [$actions];
+        }
+
+        foreach ($source as $action) {
+            if ($action instanceof ActionButtonContract) {
+                try {
+                    $action->setData(new ModelDataWrapper($item));
+                } catch (\Throwable $e) {
+                    $this->log('warning', 'Failed to bind item context to custom action', [
+                        'item_id' => $item->getKey(),
+                        'action_class' => $action::class,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+
+                $list[] = $this->ensureCalendarActionIsAsync($action, $item, 'custom');
+                continue;
+            }
+
+            if (is_string($action)) {
+                $list[] = $action;
+                continue;
+            }
+
+            $this->log('warning', 'Unsupported custom calendar action type', [
+                'item_id' => $item->getKey(),
+                'type' => get_debug_type($action),
+            ]);
+        }
+
+        return $list;
+    }
+
+    protected function ensureCalendarActionIsAsync(ActionButtonContract $action, Model $item, string $source): ActionButtonContract
+    {
+        if (method_exists($action, 'isAsync') && $action->isAsync()) {
+            return $action;
+        }
+
+        // Buttons with embedded modal/offcanvas components (Edit/Delete defaults) can still
+        // execute async inside the modal flow; avoid clobbering their behavior.
+        if (method_exists($action, 'hasComponent') && $action->hasComponent()) {
+            $this->log('info', 'Calendar action kept as modal/offcanvas flow', [
+                'item_id' => $item->getKey(),
+                'source' => $source,
+                'action_class' => $action::class,
+            ]);
+
+            return $action;
+        }
+
+        if (method_exists($action, 'async')) {
+            $action->async(HttpMethod::GET);
+
+            $this->log('info', 'Calendar action normalized to async', [
+                'item_id' => $item->getKey(),
+                'source' => $source,
+                'action_class' => $action::class,
+            ]);
+        }
+
+        return $action;
+    }
+
+    /**
+     * @return list<string>
+     */
+    protected function renderCalendarEventActionsHtml(Model $item): array
+    {
+        $rendered = [];
+
+        foreach ($this->getCalendarEventActions($item) as $action) {
+            if (is_string($action)) {
+                if (trim($action) !== '') {
+                    $rendered[] = $action;
+                }
+
+                continue;
+            }
+
+            if (!($action instanceof ActionButtonContract)) {
+                $this->log('warning', 'Unsupported calendar action while rendering', [
+                    'item_id' => $item->getKey(),
+                    'type' => get_debug_type($action),
+                ]);
+
+                continue;
+            }
+
+            try {
+                $html = trim((string) $action);
+
+                if ($html === '') {
+                    continue;
+                }
+
+                $rendered[] = $html;
+            } catch (\Throwable $e) {
+                $this->log('warning', 'Failed to render calendar action button', [
+                    'item_id' => $item->getKey(),
+                    'action_class' => $action::class,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        return $rendered;
     }
 
     /**
@@ -543,18 +886,7 @@ abstract class FullCalendarResource extends ModelResource
         ]);
 
         try {
-            $resourceUri = $this->getUriKey();
-
-            $refreshEvent = AlpineJs::event('fullcalendar:refresh', null, [
-                'resource' => $resourceUri,
-            ]);
-
-            $this->log('info', '[modifySaveResponse] Calendar refresh event added', [
-                'event' => $refreshEvent,
-                'resource' => $resourceUri,
-            ]);
-
-            $response->events([$refreshEvent]);
+            $this->appendCalendarRefreshEvent($response, 'modifySaveResponse');
         } catch (\Throwable $e) {
             $this->log('error', '[modifySaveResponse] Failed to add refresh event', [
                 'error' => $e->getMessage(),
@@ -563,5 +895,42 @@ abstract class FullCalendarResource extends ModelResource
         }
 
         return $response;
+    }
+
+    /**
+     * Modify destroy response to dispatch calendar refresh event after async delete.
+     */
+    public function modifyDestroyResponse(\MoonShine\Crud\JsonResponse $response): \MoonShine\Crud\JsonResponse
+    {
+        $this->log('info', '[modifyDestroyResponse] Adding calendar refresh event', [
+            'resource' => $this->getUriKey(),
+        ]);
+
+        try {
+            $this->appendCalendarRefreshEvent($response, 'modifyDestroyResponse');
+        } catch (\Throwable $e) {
+            $this->log('error', '[modifyDestroyResponse] Failed to add refresh event', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+        }
+
+        return $response;
+    }
+
+    protected function appendCalendarRefreshEvent(\MoonShine\Crud\JsonResponse $response, string $source): void
+    {
+        $resourceUri = $this->getUriKey();
+
+        $refreshEvent = AlpineJs::event('fullcalendar:refresh', null, [
+            'resource' => $resourceUri,
+        ]);
+
+        $this->log('info', "[$source] Calendar refresh event added", [
+            'event' => $refreshEvent,
+            'resource' => $resourceUri,
+        ]);
+
+        $response->events([$refreshEvent]);
     }
 }

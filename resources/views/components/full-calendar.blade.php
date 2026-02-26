@@ -64,6 +64,29 @@
         </div>
     </div>
 
+    <!-- Event actions dropdown (rendered from backend ActionButton HTML) -->
+    <div
+        x-ref="eventActionsDropdown"
+        x-show="dropdownOpen"
+        x-cloak
+        x-transition.opacity.duration.100ms
+        x-on:click.outside="closeEventActionsDropdown('alpine-click-outside')"
+        x-on:keydown.escape.window="closeEventActionsDropdown('alpine-escape-window')"
+        class="full-calendar-event-actions-dropdown"
+        :style="dropdownStyle"
+        style="display:none; position:absolute;"
+        role="menu"
+        tabindex="-1"
+        aria-label="{{ __('Event actions') }}"
+    >
+        <div
+            x-ref="eventActionsDropdownContent"
+            class="full-calendar-event-actions-dropdown__content"
+            x-on:click="handleDropdownActionClick($event)"
+            x-html="dropdownActionsHtml"
+        ></div>
+    </div>
+
     <!-- Hidden event trigger for MoonShine actions -->
     <div x-data="{ refreshTrigger: $watch('window.moonshineFullCalendarRefresh', value => {
         if (value) {
@@ -88,6 +111,32 @@
 
     .fc-event:hover {
         opacity: 0.8;
+    }
+
+    .full-calendar-event-actions-dropdown {
+        z-index: 10000;
+        width: max-content;
+        max-width: min(300px, calc(100vw - 1rem));
+        pointer-events: auto;
+    }
+
+    .full-calendar-event-actions-dropdown__content {
+        display: inline-flex;
+        flex-wrap: wrap;
+        width: max-content;
+        max-width: min(300px, calc(100vw - 1rem));
+        gap: 0.25rem;
+        padding: 0.375rem;
+        border-radius: 0.5rem;
+        border: 1px solid var(--color-border, #e5e7eb);
+        background: var(--color-bg, #ffffff);
+        box-shadow: 0 12px 24px rgba(15, 23, 42, 0.22);
+        backdrop-filter: blur(8px);
+    }
+
+    .full-calendar-event-actions-dropdown__content :is(.btn, button, a) {
+        flex-shrink: 0;
+        max-width: 100%;
     }
 
     /* MoonShine theme integration */
@@ -139,6 +188,12 @@
 
         .fc-theme-standard a:not([href]).fc-nav-button:disabled {
             color: var(--color-text-disabled, #6b7280);
+        }
+
+        .full-calendar-event-actions-dropdown__content {
+            border-color: var(--color-border, #374151);
+            background: rgba(17, 24, 39, 0.96);
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
         }
     }
 </style>

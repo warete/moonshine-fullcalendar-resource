@@ -9,6 +9,7 @@ Project Description — MoonShine FullCalendar Package (MVP)
 •	Интеграцию с ModelResource
 •	Асинхронную загрузку событий
 •	Открытие edit-формы в модальном окне MoonShine
+•	Dropdown действий по клику на событие (backend-rendered MoonShine ActionButton)
 •	Поддержку всех режимов отображения FullCalendar (month/week/day/list)
 
 ⸻
@@ -87,14 +88,19 @@ Frontend
 Редактирование
 
 При клике на событие:
-1.	Alpine-компонент получает edit URL
-2.	Выполняет MoonShine.request(ctx, editUrl, 'get')
-3.	MoonShine обрабатывает ответ и автоматически открывает edit modal, так как в ресурсе включён editInModal
+1.	Alpine-компонент читает payload `extendedProps.moonshineFullCalendar.actions`
+2.	Показывает absolute-position dropdown рядом с DOM-элементом события
+3.	Вставляет backend-rendered HTML MoonShine `ActionButton` и переинициализирует Alpine для async-обработчиков
+4.	Дефолтные действия: edit/delete; ресурс может добавить кастомные кнопки для конкретного события
 
 Создание
 
 Создание событий выполняется стандартной кнопкой MoonShine “Create”.
 После успешного создания календарь выполняет refetch списка событий.
+
+Удаление / редактирование из dropdown
+
+Async действия MoonShine (edit/delete) должны вызывать обновление календаря через browser event `fullcalendar:refresh` с фильтрацией по `resource`.
 
 ⸻
 
@@ -132,6 +138,11 @@ Frontend
 •	end
 •	color
 •	description
+•	extendedProps.moonshineFullCalendar.actions:
+  •	version
+  •	html (rendered MoonShine ActionButton HTML)
+  •	count
+  •	hasActions
 
 Обновление дат события (заготовка)
 
@@ -163,6 +174,8 @@ Frontend
 •	инициализация FullCalendar
 •	загрузка событий через асинхронный запрос
 •	обработка клика по событию
+•	отображение dropdown действий и позиционирование рядом с событием
+•	реинициализация Alpine для динамически вставленного MoonShine ActionButton HTML
 •	рефетч после CRUD-операций
 •	(в будущем) обработка drag/drop/resize
 

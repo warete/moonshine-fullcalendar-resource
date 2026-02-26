@@ -17,6 +17,7 @@ A Laravel package that integrates [FullCalendar.js](https://fullcalendar.io/) in
 - **Eloquent model integration** via ModelResource with automatic date filtering
 - **Async event loading** by date range using MoonShine.request
 - **Modal-based CRUD operations** with editInModal integration
+- **Event actions dropdown** on event click (MoonShine `ActionButton` HTML from backend)
 - **Alpine.js component** for reactive calendar interactions
 - **Customizable** view modes, toolbar, locale, and timezone
 - **MoonShine v4 architecture** with proper pages and components
@@ -199,13 +200,60 @@ FULLCALENDAR_LOG_LEVEL=debug
 FULLCALENDAR_DEBUG=true
 ```
 
+## Event Actions Dropdown (Edit/Delete + Custom Actions)
+
+By default, each calendar event payload now includes a backend-rendered actions dropdown payload:
+
+- `extendedProps.moonshineFullCalendar.actions.version`
+- `extendedProps.moonshineFullCalendar.actions.html`
+- `extendedProps.moonshineFullCalendar.actions.count`
+- `extendedProps.moonshineFullCalendar.actions.hasActions`
+
+When you click an event in the calendar, the package shows an absolute-positioned dropdown near the event element and injects the backend-rendered MoonShine `ActionButton` HTML.
+
+### Default Actions
+
+`FullCalendarResource` includes default resource actions for each event:
+
+- `Edit` (async, modal-friendly; `editInModal` is enabled by default in `FullCalendarResource`)
+- `Delete` (async confirm flow)
+
+After async edit/save and async delete, the package dispatches `fullcalendar:refresh`, and the calendar refetches events automatically.
+
+### Add Custom Per-Event Actions
+
+Override the resource hook and return MoonShine action buttons (or raw HTML if needed):
+
+```php
+use Illuminate\Database\Eloquent\Model;
+use MoonShine\UI\Components\ActionButton;
+
+class EventResource extends FullCalendarResource
+{
+    protected function getCustomCalendarEventActions(Model $item): iterable
+    {
+        return [
+            ActionButton::make('Duplicate', route('events.duplicate', $item))
+                ->primary()
+                ->async(),
+        ];
+    }
+}
+```
+
+Notes:
+
+- The package binds the current model context to actions before rendering (`ModelDataWrapper`).
+- Custom buttons are normalized to async where possible.
+- Injected dropdown HTML is re-initialized with Alpine (`Alpine.initTree`) so MoonShine async handlers work after dynamic insertion.
+
 ## Auto-Refresh After CRUD Operations
 
-The calendar automatically refreshes after creating and updating events through MoonShine modal forms. This is handled through a custom event system.
+The calendar automatically refreshes after creating, updating, and deleting events through async MoonShine actions. This is handled through a custom event system.
 
 ### How It Works
 
-1. **PHP Side:** When a calendar event is saved via modal, the `modifySaveResponse()` method adds a `fullcalendar:refresh` event to the response
+1. **PHP Side:** `modifySaveResponse()` and `modifyDestroyResponse()` add a `fullcalendar:refresh` event to the response
 2. **JavaScript Side:** The calendar component listens for this event and refetches events automatically
 3. **Resource Filtering:** Events are filtered by resource URI, so only the relevant calendar refreshes
 
@@ -244,6 +292,22 @@ public function modifySaveResponse(\MoonShine\Crud\JsonResponse $response): \Moo
 
     return $response;
 }
+```
+
+If you override `modifyDestroyResponse()`, keep the same `fullcalendar:refresh` event contract (`resource` key) so dropdown delete actions still refresh the current calendar instance.
+
+## Frontend Asset Rebuild
+
+After changing package frontend sources (`resources/js/*`, `resources/views/components/*`), rebuild package assets:
+
+```bash
+npm run build
+```
+
+Then republish in the host app if needed:
+
+```bash
+php artisan vendor:publish --tag=moonshine-fullcalendar-assets --force
 ```
 
 #### Manual Refresh

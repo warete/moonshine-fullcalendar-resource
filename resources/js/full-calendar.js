@@ -76,6 +76,22 @@ export function registerFullCalendar() {
         refreshListenerHandler: null,
         refreshListenerAbortController: null,
         refreshListenerObserver: null,
+        dropdownDismissAbortController: null,
+        dropdownOpen: false,
+        dropdownEventId: null,
+        dropdownActionsHtml: '',
+        dropdownActionsCount: 0,
+        dropdownX: 0,
+        dropdownY: 0,
+        dropdownStyle: 'display:none;',
+        dropdownPlacement: 'bottom',
+        dropdownDismissPointerHandler: null,
+        dropdownDismissKeyHandler: null,
+        dropdownRepositionAbortController: null,
+        dropdownRepositionScrollHandler: null,
+        dropdownRepositionResizeHandler: null,
+        dropdownAnchorEl: null,
+        dropdownAnchorClickOffsetX: null,
 
         // Props
         config: props.config || {},
@@ -165,6 +181,7 @@ export function registerFullCalendar() {
 
                 // View change handler
                 datesSet: (info) => {
+                    this.closeEventActionsDropdown('datesSet');
                     this.log('debug', 'View changed', {
                         view: info.view.type,
                         start: info.start.toISOString(),
@@ -183,6 +200,9 @@ export function registerFullCalendar() {
                     locale: this.currentLocale
                 });
 
+                this.setupDropdownDismissListeners();
+                this.setupDropdownRepositionListeners();
+                this.logDropdownHostStatus();
                 // Setup event listener for calendar refresh after CRUD operations
                 this.setupRefreshListener();
                 this.applyInitialLayoutFix('init');
@@ -196,6 +216,10 @@ export function registerFullCalendar() {
         },
 
         teardownRefreshListener(reason = 'unknown') {
+            this.teardownDropdownDismissListeners(`refresh-teardown:${reason}`);
+            this.teardownDropdownRepositionListeners(`refresh-teardown:${reason}`);
+            this.closeEventActionsDropdown(`refresh-teardown:${reason}`);
+
             if (this.refreshListenerAbortController) {
                 this.log('info', '[FIX][refresh] Tearing down refresh listeners via AbortController', { reason });
                 this.refreshListenerAbortController.abort();
@@ -212,6 +236,414 @@ export function registerFullCalendar() {
                 this.refreshListenerObserver.disconnect();
                 this.refreshListenerObserver = null;
             }
+        },
+
+        setupDropdownDismissListeners() {
+            if (this.dropdownDismissAbortController || typeof document === 'undefined') {
+                return;
+            }
+
+            this.dropdownDismissPointerHandler ??= this.handleDocumentPointerDown.bind(this);
+            this.dropdownDismissKeyHandler ??= this.handleDocumentKeydown.bind(this);
+
+            if (typeof AbortController !== 'undefined') {
+                this.dropdownDismissAbortController = new AbortController();
+                const signal = this.dropdownDismissAbortController.signal;
+
+                document.addEventListener('pointerdown', this.dropdownDismissPointerHandler, { signal });
+                document.addEventListener('click', this.dropdownDismissPointerHandler, { signal });
+                document.addEventListener('keydown', this.dropdownDismissKeyHandler, { signal });
+            } else {
+                document.addEventListener('pointerdown', this.dropdownDismissPointerHandler);
+                document.addEventListener('click', this.dropdownDismissPointerHandler);
+                document.addEventListener('keydown', this.dropdownDismissKeyHandler);
+            }
+
+            this.log('info', '[FIX][actions-dropdown] Dismiss listeners registered', {
+                targets: ['document:pointerdown', 'document:click', 'document:keydown']
+            });
+        },
+
+        teardownDropdownDismissListeners(reason = 'unknown') {
+            if (this.dropdownDismissAbortController) {
+                this.dropdownDismissAbortController.abort();
+                this.dropdownDismissAbortController = null;
+                this.log('info', '[FIX][actions-dropdown] Dismiss listeners removed', { reason });
+                return;
+            }
+
+            if (this.dropdownDismissPointerHandler) {
+                document.removeEventListener('pointerdown', this.dropdownDismissPointerHandler);
+                document.removeEventListener('click', this.dropdownDismissPointerHandler);
+            }
+
+            if (this.dropdownDismissKeyHandler) {
+                document.removeEventListener('keydown', this.dropdownDismissKeyHandler);
+            }
+
+            this.log('info', '[FIX][actions-dropdown] Dismiss listeners removed (fallback)', { reason });
+        },
+
+        setupDropdownRepositionListeners() {
+            if (this.dropdownRepositionAbortController || typeof document === 'undefined' || typeof window === 'undefined') {
+                return;
+            }
+
+            this.dropdownRepositionScrollHandler ??= this.handleDropdownRepositionEvent.bind(this);
+            this.dropdownRepositionResizeHandler ??= this.handleDropdownRepositionEvent.bind(this);
+
+            if (typeof AbortController !== 'undefined') {
+                this.dropdownRepositionAbortController = new AbortController();
+                const signal = this.dropdownRepositionAbortController.signal;
+
+                document.addEventListener('scroll', this.dropdownRepositionScrollHandler, { capture: true, signal });
+                window.addEventListener('resize', this.dropdownRepositionResizeHandler, { signal });
+            } else {
+                document.addEventListener('scroll', this.dropdownRepositionScrollHandler, true);
+                window.addEventListener('resize', this.dropdownRepositionResizeHandler);
+            }
+
+            this.log('info', '[FIX][actions-dropdown] Reposition listeners registered', {
+                targets: ['document:scroll(capture)', 'window:resize']
+            });
+        },
+
+        teardownDropdownRepositionListeners(reason = 'unknown') {
+            if (this.dropdownRepositionAbortController) {
+                this.dropdownRepositionAbortController.abort();
+                this.dropdownRepositionAbortController = null;
+                this.log('info', '[FIX][actions-dropdown] Reposition listeners removed', { reason });
+                return;
+            }
+
+            if (this.dropdownRepositionScrollHandler) {
+                document.removeEventListener('scroll', this.dropdownRepositionScrollHandler, true);
+            }
+
+            if (this.dropdownRepositionResizeHandler) {
+                window.removeEventListener('resize', this.dropdownRepositionResizeHandler);
+            }
+
+            this.log('info', '[FIX][actions-dropdown] Reposition listeners removed (fallback)', { reason });
+        },
+
+        handleDropdownRepositionEvent(event) {
+            if (!this.dropdownOpen) {
+                return;
+            }
+
+            const dropdownEl = this.$refs?.eventActionsDropdown;
+            const anchorEl = this.dropdownAnchorEl;
+
+            if (!dropdownEl || !anchorEl || !anchorEl.isConnected) {
+                this.log('warn', '[FIX][actions-dropdown] Closing on reposition because anchor is unavailable', {
+                    eventType: event?.type || 'unknown',
+                    dropdownFound: !!dropdownEl,
+                    anchorFound: !!anchorEl,
+                    anchorConnected: !!anchorEl?.isConnected
+                });
+                this.closeEventActionsDropdown(`reposition-missing:${event?.type || 'unknown'}`);
+                return;
+            }
+
+            this.positionEventActionsDropdown(anchorEl, dropdownEl);
+        },
+
+        handleDocumentPointerDown(event) {
+            if (!this.dropdownOpen) {
+                return;
+            }
+
+            const dropdownEl = this.$refs?.eventActionsDropdown;
+            if (dropdownEl && dropdownEl.contains(event.target)) {
+                return;
+            }
+
+            this.closeEventActionsDropdown('outside-click');
+        },
+
+        handleDocumentKeydown(event) {
+            if (!this.dropdownOpen) {
+                return;
+            }
+
+            if (event.key === 'Escape') {
+                this.closeEventActionsDropdown('escape');
+            }
+        },
+
+        handleDropdownActionClick(event) {
+            if (!this.dropdownOpen) {
+                return;
+            }
+
+            const actionTarget = event?.target?.closest?.('a, button, .btn, [role="button"]');
+            if (!actionTarget) {
+                return;
+            }
+
+            this.log('info', '[FIX][actions-dropdown] Action click detected, scheduling close', {
+                eventId: this.dropdownEventId,
+                tagName: actionTarget.tagName,
+                className: actionTarget.className || null
+            });
+
+            // Close after MoonShine/Alpine handlers receive the click event.
+            setTimeout(() => {
+                this.closeEventActionsDropdown('action-click');
+            }, 0);
+        },
+
+        dedupeTeleportedModalTemplates() {
+            const templates = Array.from(document.querySelectorAll('.modal-template[data-teleport-target="true"]'));
+            const groups = new Map();
+            let removedCount = 0;
+
+            for (const template of templates) {
+                const keyAttr = template
+                    .getAttributeNames()
+                    .find((name) => name.startsWith('@modal_toggled:'));
+
+                if (!keyAttr) {
+                    continue;
+                }
+
+                if (!groups.has(keyAttr)) {
+                    groups.set(keyAttr, []);
+                }
+
+                groups.get(keyAttr).push(template);
+            }
+
+            for (const [keyAttr, group] of groups.entries()) {
+                if (group.length <= 1) {
+                    continue;
+                }
+
+                // Keep the latest teleported template (most recently initialized), remove older duplicates.
+                const toRemove = group.slice(0, -1);
+                toRemove.forEach((node) => {
+                    node.remove();
+                    removedCount++;
+                });
+
+                this.log('warn', '[FIX][actions-dropdown] Removed duplicate teleported modal templates', {
+                    modalEventKey: keyAttr,
+                    duplicatesRemoved: toRemove.length,
+                    kept: 1
+                });
+            }
+
+            if (removedCount === 0) {
+                this.log('debug', '[FIX][actions-dropdown] No duplicate teleported modal templates found');
+            }
+        },
+
+        logDropdownHostStatus() {
+            this.log('info', '[actions-dropdown] Dropdown host mounted', {
+                hostFound: !!this.$refs?.eventActionsDropdown,
+                contentFound: !!this.$refs?.eventActionsDropdownContent
+            });
+        },
+
+        getEventActionsPayload(event) {
+            const payload = event?.extendedProps?.moonshineFullCalendar?.actions ?? null;
+
+            this.log('info', '[actions-dropdown] Event payload inspected', {
+                eventId: event?.id ?? null,
+                payloadKeys: payload ? Object.keys(payload) : [],
+                extendedPropsKeys: event?.extendedProps ? Object.keys(event.extendedProps) : []
+            });
+
+            return payload;
+        },
+
+        updateDropdownStyle() {
+            this.dropdownStyle = this.dropdownOpen
+                ? `position:absolute; left:${Math.max(0, this.dropdownX)}px; top:${Math.max(0, this.dropdownY)}px;`
+                : 'display:none;';
+        },
+
+        closeEventActionsDropdown(reason = 'unknown') {
+            if (!this.dropdownOpen && !this.dropdownActionsHtml && !this.dropdownEventId) {
+                return;
+            }
+
+            this.dropdownOpen = false;
+            this.dropdownEventId = null;
+            this.dropdownActionsHtml = '';
+            this.dropdownActionsCount = 0;
+            this.dropdownAnchorEl = null;
+            this.dropdownAnchorClickOffsetX = null;
+            this.updateDropdownStyle();
+
+            this.dropdownPlacement = 'bottom';
+
+            this.log('info', '[FIX][actions-dropdown] Closed', { reason });
+        },
+
+        positionEventActionsDropdown(anchorEl, dropdownEl = null) {
+            if (!anchorEl || !this.$el) {
+                return false;
+            }
+
+            const anchorRect = anchorEl.getBoundingClientRect();
+            const rootRect = this.$el.getBoundingClientRect();
+            const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+            const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+            const offset = 8;
+            const margin = 8;
+
+            const measuredWidth = dropdownEl?.offsetWidth || 220;
+            const measuredHeight = dropdownEl?.offsetHeight || 56;
+
+            // Prefer X near the exact click position inside the event card (if available),
+            // fallback to event center.
+            const anchorClickXViewport = typeof this.dropdownAnchorClickOffsetX === 'number'
+                ? (anchorRect.left + this.dropdownAnchorClickOffsetX)
+                : (anchorRect.left + (anchorRect.width / 2));
+
+            const preferredLeftViewport = anchorClickXViewport - (measuredWidth / 2);
+            const clampedLeftViewport = Math.min(
+                Math.max(margin, preferredLeftViewport),
+                Math.max(margin, viewportWidth - measuredWidth - margin)
+            );
+
+            const spaceBelow = viewportHeight - anchorRect.bottom - margin;
+            const spaceAbove = anchorRect.top - margin;
+            const placeBelow = spaceBelow >= measuredHeight + offset || spaceBelow >= spaceAbove;
+
+            let topViewport = placeBelow
+                ? anchorRect.bottom + offset
+                : anchorRect.top - measuredHeight - offset;
+
+            topViewport = Math.min(
+                Math.max(margin, topViewport),
+                Math.max(margin, viewportHeight - measuredHeight - margin)
+            );
+
+            this.dropdownX = clampedLeftViewport - rootRect.left;
+            this.dropdownY = topViewport - rootRect.top;
+            this.dropdownPlacement = placeBelow ? 'bottom' : 'top';
+
+            this.updateDropdownStyle();
+
+            this.log('info', '[FIX][actions-dropdown] Positioned', {
+                x: this.dropdownX,
+                y: this.dropdownY,
+                placement: this.dropdownPlacement,
+                viewportWidth,
+                viewportHeight,
+                measuredWidth,
+                measuredHeight,
+                anchorClickXViewport,
+                clickOffsetX: this.dropdownAnchorClickOffsetX,
+                rootRect: {
+                    left: rootRect.left,
+                    top: rootRect.top,
+                    width: rootRect.width,
+                    height: rootRect.height
+                },
+                anchorRect: {
+                    left: anchorRect.left,
+                    top: anchorRect.top,
+                    right: anchorRect.right,
+                    bottom: anchorRect.bottom,
+                    width: anchorRect.width,
+                    height: anchorRect.height
+                }
+            });
+
+            return true;
+        },
+
+        initializeEventActionsDropdownContent(eventId, actionsCount) {
+            const contentEl = this.$refs?.eventActionsDropdownContent;
+            if (!contentEl) {
+                this.log('warn', '[actions-dropdown] Dropdown content node not found', {
+                    eventId,
+                    actionsCount
+                });
+                return;
+            }
+
+            try {
+                if (window.Alpine && typeof window.Alpine.initTree === 'function') {
+                    const childRoots = Array.from(contentEl.children || []);
+
+                    childRoots.forEach((child) => {
+                        window.Alpine.initTree(child);
+                    });
+
+                    this.dedupeTeleportedModalTemplates();
+
+                    this.log('info', '[FIX][actions-dropdown] HTML injected and Alpine child subtrees initialized', {
+                        eventId,
+                        actionsCount,
+                        initMethod: 'Alpine.initTree(children)',
+                        childRootsCount: childRoots.length
+                    });
+                    return;
+                }
+
+                this.log('warn', '[FIX][actions-dropdown] Alpine.initTree unavailable for injected actions HTML', {
+                    eventId,
+                    actionsCount
+                });
+            } catch (error) {
+                this.log('error', '[FIX][actions-dropdown] Failed to initialize injected actions HTML', {
+                    eventId,
+                    actionsCount,
+                    error: error.message,
+                    stack: error.stack
+                });
+            }
+        },
+
+        openEventActionsDropdown({ eventId, actionsHtml, actionsCount, anchorEl, clickClientX = null }) {
+            const hostEl = this.$refs?.eventActionsDropdown;
+            const contentEl = this.$refs?.eventActionsDropdownContent;
+
+            if (!hostEl || !contentEl) {
+                this.log('warn', '[actions-dropdown] Dropdown host/content refs missing', {
+                    eventId,
+                    hostFound: !!hostEl,
+                    contentFound: !!contentEl
+                });
+                return false;
+            }
+
+            this.dropdownEventId = String(eventId);
+            this.dropdownActionsHtml = actionsHtml;
+            this.dropdownActionsCount = actionsCount;
+            this.dropdownOpen = true;
+            this.dropdownAnchorEl = anchorEl;
+            this.dropdownAnchorClickOffsetX = null;
+
+            if (anchorEl && typeof clickClientX === 'number') {
+                const anchorRect = anchorEl.getBoundingClientRect();
+                const relativeClickX = clickClientX - anchorRect.left;
+                this.dropdownAnchorClickOffsetX = Math.min(
+                    Math.max(0, relativeClickX),
+                    Math.max(0, anchorRect.width)
+                );
+            }
+
+            if (!this.positionEventActionsDropdown(anchorEl)) {
+                this.log('warn', '[actions-dropdown] Failed to position dropdown', { eventId });
+            }
+
+            this.$nextTick(() => {
+                this.initializeEventActionsDropdownContent(eventId, actionsCount);
+                this.positionEventActionsDropdown(anchorEl, this.$refs?.eventActionsDropdown);
+            });
+
+            this.log('info', '[FIX][actions-dropdown] Opened', {
+                eventId,
+                actionsCount
+            });
+
+            return true;
         },
 
         setupRefreshListenerAutoCleanup() {
@@ -257,7 +689,8 @@ export function registerFullCalendar() {
                     return;
                 }
 
-                this.log('info', '[FIX][layout] Applying timeGridDay layout refresh', {
+                const layoutLogLevel = phase === 'raf-1' ? 'info' : 'debug';
+                this.log(layoutLogLevel, '[FIX][layout] Applying timeGridDay layout refresh', {
                     reason,
                     phase,
                     viewType,
@@ -386,6 +819,7 @@ export function registerFullCalendar() {
                     });
 
                     if (self.calendar) {
+                        self.closeEventActionsDropdown('refresh-broadcast');
                         self.calendar.refetchEvents();
                     } else {
                         self.log('warn', '[FIX][refresh] Cannot refresh on broadcast: calendar not initialized');
@@ -412,6 +846,7 @@ export function registerFullCalendar() {
                         });
 
                         if (self.calendar) {
+                            self.closeEventActionsDropdown('refresh-fallback');
                             self.calendar.refetchEvents();
                         }
 
@@ -424,6 +859,7 @@ export function registerFullCalendar() {
 
                         // Call refetchEvents
                         if (self.calendar) {
+                            self.closeEventActionsDropdown('refresh-resource-match');
                             const beforeCount = self.calendar.getEvents().length;
                             self.log('info', '[refresh] Before refetch', { eventCount: beforeCount });
 
@@ -498,6 +934,7 @@ export function registerFullCalendar() {
         fetchEvents: async function(info, successCallback, failureCallback) {
             this.loading = true;
             this.error = null;
+            this.closeEventActionsDropdown('fetch-events-start');
 
             const start = info.start ? info.start.toISOString() : null;
             const end = info.end ? info.end.toISOString() : null;
@@ -633,12 +1070,47 @@ export function registerFullCalendar() {
          * Handle event click
          */
         handleEventClick(info) {
-            this.log('debug', 'Event clicked', {
+            const payload = this.getEventActionsPayload(info.event);
+            const hasActions = !!(payload && payload.hasActions);
+            const actionsHtml = typeof payload?.html === 'string' ? payload.html : '';
+            const actionsCount = Number(payload?.count || 0);
+
+            this.log('info', '[FIX][actions-dropdown] Event clicked', {
                 eventId: info.event.id,
-                title: info.event.title
+                title: info.event.title,
+                hasActions,
+                actionsCount
             });
 
-            // Trigger edit modal if configured
+            if (hasActions && actionsHtml.trim() !== '') {
+                info.jsEvent?.preventDefault?.();
+                info.jsEvent?.stopPropagation?.();
+
+                if (this.dropdownOpen && String(this.dropdownEventId) === String(info.event.id)) {
+                    this.closeEventActionsDropdown('toggle-same-event');
+                    return;
+                }
+
+                this.openEventActionsDropdown({
+                    eventId: info.event.id,
+                    actionsHtml,
+                    actionsCount,
+                    anchorEl: info.el,
+                    clickClientX: typeof info.jsEvent?.clientX === 'number' ? info.jsEvent.clientX : null
+                });
+
+                return;
+            }
+
+            if (hasActions && actionsHtml.trim() === '') {
+                this.log('warn', '[actions-dropdown] Actions payload present but HTML missing', {
+                    eventId: info.event.id,
+                    actionsCount
+                });
+            }
+
+            this.closeEventActionsDropdown('event-click-no-actions');
+
             if (info.event.url) {
                 window.location.href = info.event.url;
             } else if (window.moonshineFullCalendarEventClick) {
@@ -711,6 +1183,7 @@ export function registerFullCalendar() {
          */
         refreshCalendar() {
             this.log('debug', 'Refreshing calendar');
+            this.closeEventActionsDropdown('manual-refresh');
 
             if (this.calendar) {
                 this.calendar.refetchEvents();
