@@ -1,5 +1,8 @@
 name: Node.js CI
 
+permissions:
+  contents: write
+
 on: [push]
 
 jobs:
@@ -13,12 +16,12 @@ jobs:
         # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       with:
-        # Must be used to trigger workflow after push
-        token: ${{ secrets.ACCESS_TOKEN }}
+        persist-credentials: true
+        fetch-depth: 0
     - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
         node-version: ${{ matrix.node-version }}
         cache: 'npm'
@@ -30,3 +33,5 @@ jobs:
       with:
           commit_message: Build assets
           push_options: '--force'
+      env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
