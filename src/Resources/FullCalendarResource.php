@@ -12,8 +12,6 @@ use MoonShine\Contracts\Core\DependencyInjection\FieldsContract;
 use MoonShine\Contracts\UI\ActionButtonContract;
 use MoonShine\Contracts\UI\FieldContract;
 use MoonShine\Contracts\UI\ModalContract;
-use MoonShine\Crud\Buttons\DeleteButton;
-use MoonShine\Crud\Buttons\EditButton;
 use MoonShine\Crud\JsonResponse;
 use MoonShine\Laravel\Resources\ModelResource;
 use MoonShine\Laravel\TypeCasts\ModelDataWrapper;
@@ -45,6 +43,12 @@ abstract class FullCalendarResource extends ModelResource
      * Consumers can opt out by overriding this property in their resource.
      */
     protected bool $editInModal = true;
+
+    /**
+     * Calendar event details are also expected to open in a modal by default.
+     * Consumers can opt out by overriding this property in their resource.
+     */
+    protected bool $detailInModal = true;
 
     /**
      * FullCalendar view modes
@@ -369,26 +373,16 @@ abstract class FullCalendarResource extends ModelResource
      */
     protected function buildCalendarEventActionsPayload(Model $item): array
     {
-        try {
-            $renderedButtons = $this->renderCalendarEventActionsHtml($item);
+        $renderedButtons = $this->renderCalendarEventActionsHtml($item);
 
-            $payload = [
-                'version' => 1,
-                'html' => implode('', $renderedButtons),
-                'count' => count($renderedButtons),
-                'hasActions' => count($renderedButtons) > 0,
-            ];
+        $payload = [
+            'version' => 1,
+            'html' => implode('', $renderedButtons),
+            'count' => count($renderedButtons),
+            'hasActions' => count($renderedButtons) > 0,
+        ];
 
-            return $payload;
-        } catch (\Throwable) {
-
-            return [
-                'version' => 1,
-                'html' => '',
-                'count' => 0,
-                'hasActions' => false,
-            ];
-        }
+        return $payload;
     }
 
     /**
@@ -424,29 +418,28 @@ abstract class FullCalendarResource extends ModelResource
     protected function getDefaultCalendarEventActions(Model $item): array
     {
         $wrapped = new ModelDataWrapper($item);
+        $this->setItem($item);
 
-        try {
-            $this->setItem($item);
-        } catch (\Throwable) {
-        }
-
-        $actions = [];
-
-        try {
-            $editButton = EditButton::for($this, isAsync: true)
-                ->setData($wrapped);
-
-            $actions[] = $this->ensureCalendarActionIsAsync($editButton, $item, 'edit');
-        } catch (\Throwable) {
-        }
-
-        try {
-            $deleteButton = DeleteButton::for($this, isAsync: true)
-                ->setData($wrapped);
-
-            $actions[] = $this->ensureCalendarActionIsAsync($deleteButton, $item, 'delete');
-        } catch (\Throwable) {
-        }
+        $actions = [
+            $this->ensureCalendarActionIsAsync(
+                $this->getDetailButton()
+                    ->setData($wrapped),
+                $item,
+                'detail'
+            ),
+            $this->ensureCalendarActionIsAsync(
+                $this->getEditButton(isAsync: true)
+                    ->setData($wrapped),
+                $item,
+                'edit'
+            ),
+            $this->ensureCalendarActionIsAsync(
+                $this->getDeleteButton(isAsync: true)
+                    ->setData($wrapped),
+                $item,
+                'delete'
+            ),
+        ];
 
         return array_values(array_filter($actions, static fn ($action): bool => $action instanceof ActionButtonContract));
     }
@@ -470,10 +463,7 @@ abstract class FullCalendarResource extends ModelResource
 
         foreach ($source as $action) {
             if ($action instanceof ActionButtonContract) {
-                try {
-                    $action->setData(new ModelDataWrapper($item));
-                } catch (\Throwable) {
-                }
+                $action->setData(new ModelDataWrapper($item));
 
                 $list[] = $this->ensureCalendarActionIsAsync($action, $item, 'custom');
 
@@ -533,16 +523,13 @@ abstract class FullCalendarResource extends ModelResource
                 continue;
             }
 
-            try {
-                $html = trim((string) $action);
+            $html = trim((string) $action);
 
-                if ($html === '') {
-                    continue;
-                }
-
-                $rendered[] = $html;
-            } catch (\Throwable) {
+            if ($html === '') {
+                continue;
             }
+
+            $rendered[] = $html;
         }
 
         return $rendered;
