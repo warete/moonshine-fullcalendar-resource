@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace Warete\MoonShineFullCalendar\Resources;
 
+use Throwable;
+use DateTimeInterface;
+use MoonShine\Contracts\Core\PageContract;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use MoonShine\Contracts\Core\DependencyInjection\CoreContract;
@@ -123,7 +127,7 @@ abstract class FullCalendarResource extends ModelResource
 
     public function __construct(CoreContract $core)
     {
-        $this->timezone = $this->timezone ?? config('app.timezone');
+        $this->timezone ??= config('app.timezone');
 
         parent::__construct($core);
     }
@@ -169,12 +173,12 @@ abstract class FullCalendarResource extends ModelResource
 
         // Apply date range filtering if provided
         if ($normalizedStart && $normalizedEnd) {
-            $query->where(function ($q) use ($normalizedStart, $normalizedEnd) {
+            $query->where(function ($q) use ($normalizedStart, $normalizedEnd): void {
                 // FullCalendar end is exclusive. Select events that overlap [start, end).
-                $q->where(function ($q) use ($normalizedStart, $normalizedEnd) {
+                $q->where(function ($q) use ($normalizedStart, $normalizedEnd): void {
                     $q->where($this->startColumn, '<', $normalizedEnd)
                         ->where($this->endColumn, '>', $normalizedStart);
-                })->orWhere(function ($q) use ($normalizedStart, $normalizedEnd) {
+                })->orWhere(function ($q) use ($normalizedStart, $normalizedEnd): void {
                     // Fallback for records without end date: point-in-time events by start only
                     $q->whereNull($this->endColumn)
                         ->where($this->startColumn, '>=', $normalizedStart)
@@ -196,9 +200,7 @@ abstract class FullCalendarResource extends ModelResource
         // Apply ordering
         $query->orderBy($this->startColumn, 'asc');
 
-        $items = $query->get();
-
-        return $items;
+        return $query->get();
     }
 
     /**
@@ -212,10 +214,9 @@ abstract class FullCalendarResource extends ModelResource
 
         try {
             $timezone = $this->timezone ?: config('app.timezone');
-            $normalized = Carbon::parse($value)->setTimezone($timezone)->format('Y-m-d H:i:s');
 
-            return $normalized;
-        } catch (\Throwable) {
+            return Carbon::parse($value)->setTimezone($timezone)->format('Y-m-d H:i:s');
+        } catch (Throwable) {
 
             return $value;
         }
@@ -314,7 +315,7 @@ abstract class FullCalendarResource extends ModelResource
             return null;
         }
 
-        if ($value instanceof \DateTimeInterface) {
+        if ($value instanceof DateTimeInterface) {
             return $value->format('c');
         }
 
@@ -324,7 +325,7 @@ abstract class FullCalendarResource extends ModelResource
                 $parsed = Carbon::parse($value, $timezone);
 
                 return $parsed->format('c');
-            } catch (\Throwable) {
+            } catch (Throwable) {
 
                 return $value;
             }
@@ -354,7 +355,7 @@ abstract class FullCalendarResource extends ModelResource
             $startStr = $this->formatDateTime($start);
             $endStr = $this->formatDateTime($end);
 
-            return preg_match('/T00:00:00/', $startStr) && preg_match('/T00:00:00/', $endStr);
+            return preg_match('/T00:00:00/', (string) $startStr) && preg_match('/T00:00:00/', (string) $endStr);
         }
 
         return false;
@@ -375,14 +376,12 @@ abstract class FullCalendarResource extends ModelResource
     {
         $renderedButtons = $this->renderCalendarEventActionsHtml($item);
 
-        $payload = [
+        return [
             'version' => 1,
             'html' => implode('', $renderedButtons),
             'count' => count($renderedButtons),
-            'hasActions' => count($renderedButtons) > 0,
+            'hasActions' => $renderedButtons !== [],
         ];
-
-        return $payload;
     }
 
     /**
@@ -392,9 +391,8 @@ abstract class FullCalendarResource extends ModelResource
     {
         $defaultActions = $this->getDefaultCalendarEventActions($item);
         $customActions = $this->normalizeCustomCalendarEventActions($this->getCustomCalendarEventActions($item), $item);
-        $actions = [...$defaultActions, ...$customActions];
 
-        return $actions;
+        return [...$defaultActions, ...$customActions];
     }
 
     /**
@@ -543,20 +541,16 @@ abstract class FullCalendarResource extends ModelResource
 
         // Build the endpoint URL manually for resource-scoped routes
         // The route is: /admin/resource/{resourceUri}/full-calendar/events
-        $resourceUri = $this->getUriKey();
-        $endpoint = moonshineRouter()->to('full-calendar.events.list', ['resourceUri' => $this->getUriKey()]);
-
-        return $endpoint;
+        $this->getUriKey();
+        return moonshineRouter()->to('full-calendar.events.list', ['resourceUri' => $this->getUriKey()]);
     }
 
     public function getEventDatesUpdateEndpointTemplate(): string
     {
-        $template = moonshineRouter()->to('full-calendar.events.dates.update', [
+        return moonshineRouter()->to('full-calendar.events.dates.update', [
             'resourceUri' => $this->getUriKey(),
             'resourceItem' => $this->calendarEventDateUpdateIdPlaceholder,
         ]);
-
-        return $template;
     }
 
     /**
@@ -564,7 +558,7 @@ abstract class FullCalendarResource extends ModelResource
      */
     public function getCalendarConfig(): array
     {
-        $config = array_merge([
+        return array_merge([
             'initialView' => $this->defaultView,
             'headerToolbar' => $this->headerToolbar,
             'editable' => $this->editable,
@@ -582,8 +576,6 @@ abstract class FullCalendarResource extends ModelResource
             ],
             'createFromGrid' => $this->getCalendarCreateConfig(),
         ], $this->calendarOptions);
-
-        return $config;
     }
 
     /**
@@ -602,7 +594,7 @@ abstract class FullCalendarResource extends ModelResource
         $enabled = false;
         $reason = 'available';
 
-        if ($this->getFormPage() === null) {
+        if (!$this->getFormPage() instanceof PageContract) {
             $reason = 'missing-form-page';
         } elseif (! $this->isCreateInModal()) {
             $reason = 'create-in-modal-disabled';
@@ -614,7 +606,7 @@ abstract class FullCalendarResource extends ModelResource
             $enabled = true;
         }
 
-        $config = [
+        return [
             'enabled' => $enabled,
             'modalName' => $this->calendarCreateModalName,
             'startParam' => $this->startColumn,
@@ -623,8 +615,6 @@ abstract class FullCalendarResource extends ModelResource
             'timedFallbackDurationMinutes' => 60,
             'allDayFallbackDurationDays' => 1,
         ];
-
-        return $config;
     }
 
     public function getCalendarCreateModalName(): string
@@ -690,17 +680,17 @@ abstract class FullCalendarResource extends ModelResource
             $this->appendCalendarRefreshEvent($response);
 
             return $response;
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
 
             $response = JsonResponse::make()
                 ->toast(
-                    $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface && $e->getMessage() !== ''
+                    $e instanceof HttpExceptionInterface && $e->getMessage() !== ''
                         ? $e->getMessage()
                         : __('moonshine::ui.saved_error'),
                     ToastType::ERROR
                 )
                 ->setStatusCode(
-                    $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface
+                    $e instanceof HttpExceptionInterface
                         ? $e->getStatusCode()
                         : Response::HTTP_INTERNAL_SERVER_ERROR
                 );
@@ -776,7 +766,7 @@ abstract class FullCalendarResource extends ModelResource
         $this->setItemID($item->getKey());
         $this->setItem($item);
 
-        if ($this->getFormPage() !== null) {
+        if ($this->getFormPage() instanceof PageContract) {
             $this->setActivePage($this->getFormPage());
         }
 
@@ -882,14 +872,14 @@ abstract class FullCalendarResource extends ModelResource
      * Modify save response to dispatch calendar refresh event
      * This is called by MoonShine after successful create/update operations
      *
-     * @param \MoonShine\Crud\JsonResponse $response The original response
-     * @return \MoonShine\Crud\JsonResponse Modified response with refresh event
+     * @param JsonResponse $response The original response
+     * @return JsonResponse Modified response with refresh event
      */
-    public function modifySaveResponse(\MoonShine\Crud\JsonResponse $response): \MoonShine\Crud\JsonResponse
+    public function modifySaveResponse(JsonResponse $response): JsonResponse
     {
         try {
             $this->appendCalendarRefreshEvent($response);
-        } catch (\Throwable) {
+        } catch (Throwable) {
         }
 
         return $response;
@@ -898,17 +888,17 @@ abstract class FullCalendarResource extends ModelResource
     /**
      * Modify destroy response to dispatch calendar refresh event after async delete.
      */
-    public function modifyDestroyResponse(\MoonShine\Crud\JsonResponse $response): \MoonShine\Crud\JsonResponse
+    public function modifyDestroyResponse(JsonResponse $response): JsonResponse
     {
         try {
             $this->appendCalendarRefreshEvent($response);
-        } catch (\Throwable) {
+        } catch (Throwable) {
         }
 
         return $response;
     }
 
-    protected function appendCalendarRefreshEvent(\MoonShine\Crud\JsonResponse $response): void
+    protected function appendCalendarRefreshEvent(JsonResponse $response): void
     {
         $resourceUri = $this->getUriKey();
 

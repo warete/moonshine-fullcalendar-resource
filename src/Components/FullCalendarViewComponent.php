@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Warete\MoonShineFullCalendar\Components;
 
+use Throwable;
+use MoonShine\Contracts\AssetManager\AssetElementContract;
 use MoonShine\AssetManager\Css;
 use MoonShine\AssetManager\Js;
 use MoonShine\Contracts\Core\DependencyInjection\CoreContract;
@@ -30,7 +32,7 @@ final class FullCalendarViewComponent extends MoonShineComponent
     }
 
     /**
-     * @return list<\MoonShine\Contracts\AssetManager\AssetElementContract>
+     * @return list<AssetElementContract>
      */
     protected function assets(): array
     {
@@ -82,7 +84,7 @@ final class FullCalendarViewComponent extends MoonShineComponent
             $html = trim((string) $button);
 
             return $html === '' ? null : $html;
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return null;
         }
     }
