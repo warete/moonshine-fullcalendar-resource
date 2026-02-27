@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 namespace Warete\MoonShineFullCalendar\Components;
 
-use Throwable;
-use MoonShine\Contracts\AssetManager\AssetElementContract;
 use MoonShine\AssetManager\Css;
 use MoonShine\AssetManager\Js;
+use MoonShine\Contracts\AssetManager\AssetElementContract;
 use MoonShine\Contracts\Core\DependencyInjection\CoreContract;
 use MoonShine\Core\Traits\WithCore;
 use MoonShine\Crud\Contracts\Page\IndexPageContract;
 use MoonShine\UI\Components\MoonShineComponent;
+use Throwable;
 use Warete\MoonShineFullCalendar\Resources\FullCalendarResource;
 
 final class FullCalendarViewComponent extends MoonShineComponent

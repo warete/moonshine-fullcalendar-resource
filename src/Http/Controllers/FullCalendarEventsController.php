@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace Warete\MoonShineFullCalendar\Http\Controllers;
 
-use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
-use Throwable;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 use MoonShine\Contracts\Core\DependencyInjection\CrudRequestContract;
 use MoonShine\Crud\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
+use Throwable;
 use Warete\MoonShineFullCalendar\Resources\FullCalendarResource;
 
 final class FullCalendarEventsController

@@ -4,15 +4,13 @@ declare(strict_types=1);
 
 namespace Warete\MoonShineFullCalendar\Resources;
 
-use Throwable;
 use DateTimeInterface;
-use MoonShine\Contracts\Core\PageContract;
-use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use MoonShine\Contracts\Core\DependencyInjection\CoreContract;
 use MoonShine\Contracts\Core\DependencyInjection\CrudRequestContract;
 use MoonShine\Contracts\Core\DependencyInjection\FieldsContract;
+use MoonShine\Contracts\Core\PageContract;
 use MoonShine\Contracts\UI\ActionButtonContract;
 use MoonShine\Contracts\UI\FieldContract;
 use MoonShine\Contracts\UI\ModalContract;
@@ -25,6 +23,8 @@ use MoonShine\Support\Enums\Action;
 use MoonShine\Support\Enums\HttpMethod;
 use MoonShine\Support\Enums\ToastType;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
+use Throwable;
 
 /**
  * @template TData of Model
@@ -542,6 +542,7 @@ abstract class FullCalendarResource extends ModelResource
         // Build the endpoint URL manually for resource-scoped routes
         // The route is: /admin/resource/{resourceUri}/full-calendar/events
         $this->getUriKey();
+
         return moonshineRouter()->to('full-calendar.events.list', ['resourceUri' => $this->getUriKey()]);
     }
 
@@ -594,7 +595,7 @@ abstract class FullCalendarResource extends ModelResource
         $enabled = false;
         $reason = 'available';
 
-        if (!$this->getFormPage() instanceof PageContract) {
+        if (! $this->getFormPage() instanceof PageContract) {
             $reason = 'missing-form-page';
         } elseif (! $this->isCreateInModal()) {
             $reason = 'create-in-modal-disabled';
