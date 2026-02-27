@@ -2,7 +2,8 @@
     "private": true,
     "scripts": {
         "dev": "vite",
-        "build": "vite build"
+        "build": "vite build",
+        "prettier": "prettier --write \"resources/**/*.{js,css}\" \"vite.config.js\""
     },
     "devDependencies": {
         "alpinejs": "^3.12.0",

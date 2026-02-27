@@ -28,10 +28,26 @@
     --msfc-text-muted: color-mix(in oklab, var(--msfc-text) 78%, transparent);
     --msfc-text-soft: color-mix(in oklab, var(--msfc-text) 56%, transparent);
     --msfc-border: color-mix(in oklab, var(--msfc-text) 20%, transparent);
-    --msfc-border-strong: color-mix(in oklab, var(--msfc-text) 30%, transparent);
-    --msfc-primary-soft: color-mix(in oklab, var(--color-primary, #2563eb) 16%, transparent);
-    --msfc-primary-soft-hover: color-mix(in oklab, var(--color-primary, #2563eb) 24%, transparent);
-    --msfc-secondary-soft: color-mix(in oklab, var(--color-secondary, #7c3aed) 16%, transparent);
+    --msfc-border-strong: color-mix(
+        in oklab,
+        var(--msfc-text) 30%,
+        transparent
+    );
+    --msfc-primary-soft: color-mix(
+        in oklab,
+        var(--color-primary, #2563eb) 16%,
+        transparent
+    );
+    --msfc-primary-soft-hover: color-mix(
+        in oklab,
+        var(--color-primary, #2563eb) 24%,
+        transparent
+    );
+    --msfc-secondary-soft: color-mix(
+        in oklab,
+        var(--color-secondary, #7c3aed) 16%,
+        transparent
+    );
     --msfc-radius-sm: var(--radius-sm, 0.375rem);
     --msfc-radius-md: var(--radius-md, 0.5rem);
     --msfc-radius-lg: var(--radius-lg, 0.75rem);
@@ -46,7 +62,10 @@
         var(--color-neutral, var(--msfc-text)) 30%,
         transparent
     );
-    --fc-neutral-text-color: var(--color-neutral-content, var(--msfc-text-muted));
+    --fc-neutral-text-color: var(
+        --color-neutral-content,
+        var(--msfc-text-muted)
+    );
     --fc-border-color: var(--msfc-border);
 
     --fc-button-text-color: var(--color-primary, #2563eb);
@@ -57,7 +76,11 @@
     --fc-button-active-bg-color: var(--msfc-primary-soft-hover);
     --fc-button-active-border-color: var(--msfc-primary-soft-hover);
 
-    --fc-event-bg-color: color-mix(in oklab, var(--color-primary, #2563eb) 75%, transparent);
+    --fc-event-bg-color: color-mix(
+        in oklab,
+        var(--color-primary, #2563eb) 75%,
+        transparent
+    );
     --fc-event-border-color: var(--color-primary, #2563eb);
     --fc-event-text-color: color-mix(
         in oklab,
@@ -83,7 +106,11 @@
     --fc-event-resizer-dot-total-width: 8px;
     --fc-event-resizer-dot-border-width: 1px;
 
-    --fc-non-business-color: color-mix(in oklab, var(--color-info, #0ea5e9) 16%, transparent);
+    --fc-non-business-color: color-mix(
+        in oklab,
+        var(--color-info, #0ea5e9) 16%,
+        transparent
+    );
     --fc-bg-event-color: var(--color-neutral, var(--msfc-text));
     --fc-bg-event-opacity: 0.3;
     --fc-highlight-color: var(--msfc-secondary-soft);
@@ -99,15 +126,21 @@
     color: inherit;
 }
 
-.ms-full-calendar .full-calendar.fc .fc-button-primary:not(:disabled).fc-button-active:focus,
-.ms-full-calendar .full-calendar.fc .fc-button-primary:not(:disabled):active:focus,
+.ms-full-calendar
+    .full-calendar.fc
+    .fc-button-primary:not(:disabled).fc-button-active:focus,
+.ms-full-calendar
+    .full-calendar.fc
+    .fc-button-primary:not(:disabled):active:focus,
 .ms-full-calendar .full-calendar.fc .fc-button-primary:focus,
 .ms-full-calendar .full-calendar.fc .fc-button:focus {
     box-shadow: none;
 }
 
 .ms-full-calendar .full-calendar.fc .fc-button-primary,
-.ms-full-calendar .full-calendar.fc .fc-button-primary:not(:disabled).fc-button-active,
+.ms-full-calendar
+    .full-calendar.fc
+    .fc-button-primary:not(:disabled).fc-button-active,
 .ms-full-calendar .full-calendar.fc .fc-button-primary:hover,
 .ms-full-calendar .full-calendar.fc .fc-button-primary:not(:disabled):active,
 .ms-full-calendar .full-calendar.fc .fc-button-primary:disabled {
@@ -126,7 +159,10 @@
     flex-wrap: wrap;
 }
 
-.ms-full-calendar .full-calendar.fc .fc-toolbar .fc-button:not(.fc-next-button):not(.fc-prev-button) {
+.ms-full-calendar
+    .full-calendar.fc
+    .fc-toolbar
+    .fc-button:not(.fc-next-button):not(.fc-prev-button) {
     padding: 0.375rem 0.875rem;
 }
 
@@ -181,7 +217,11 @@
     border-radius: var(--msfc-radius-sm);
 }
 
-.ms-full-calendar .full-calendar.fc .fc-view-harness .fc-event .fc-daygrid-event-dot {
+.ms-full-calendar
+    .full-calendar.fc
+    .fc-view-harness
+    .fc-event
+    .fc-daygrid-event-dot {
     display: none;
 }
 
@@ -195,48 +235,100 @@
 }
 
 .ms-full-calendar .full-calendar.fc .fc-event-primary {
-    --fc-event-text-color: color-mix(in oklab, var(--color-primary, #2563eb) 60%, var(--msfc-text));
+    --fc-event-text-color: color-mix(
+        in oklab,
+        var(--color-primary, #2563eb) 60%,
+        var(--msfc-text)
+    );
     --fc-event-border-color: var(--color-primary, #2563eb);
-    background: color-mix(in oklab, var(--color-primary, #2563eb) 75%, transparent);
+    background: color-mix(
+        in oklab,
+        var(--color-primary, #2563eb) 75%,
+        transparent
+    );
     color: var(--fc-event-text-color);
 }
 
 .ms-full-calendar .full-calendar.fc .fc-event-secondary {
-    --fc-event-text-color: color-mix(in oklab, var(--color-secondary, #7c3aed) 60%, var(--msfc-text));
+    --fc-event-text-color: color-mix(
+        in oklab,
+        var(--color-secondary, #7c3aed) 60%,
+        var(--msfc-text)
+    );
     --fc-event-border-color: var(--color-secondary, #7c3aed);
-    background: color-mix(in oklab, var(--color-secondary, #7c3aed) 75%, transparent);
+    background: color-mix(
+        in oklab,
+        var(--color-secondary, #7c3aed) 75%,
+        transparent
+    );
     color: var(--fc-event-text-color);
 }
 
 .ms-full-calendar .full-calendar.fc .fc-event-error {
-    --fc-event-text-color: color-mix(in oklab, var(--color-error, #dc2626) 62%, var(--msfc-text));
+    --fc-event-text-color: color-mix(
+        in oklab,
+        var(--color-error, #dc2626) 62%,
+        var(--msfc-text)
+    );
     --fc-event-border-color: var(--color-error, #dc2626);
-    background: color-mix(in oklab, var(--color-error, #dc2626) 75%, transparent);
+    background: color-mix(
+        in oklab,
+        var(--color-error, #dc2626) 75%,
+        transparent
+    );
     color: var(--fc-event-text-color);
 }
 
 .ms-full-calendar .full-calendar.fc .fc-event-warning {
-    --fc-event-text-color: color-mix(in oklab, var(--color-warning, #f59e0b) 42%, var(--msfc-text));
+    --fc-event-text-color: color-mix(
+        in oklab,
+        var(--color-warning, #f59e0b) 42%,
+        var(--msfc-text)
+    );
     --fc-event-border-color: var(--color-warning, #f59e0b);
-    background: color-mix(in oklab, var(--color-warning, #f59e0b) 75%, transparent);
+    background: color-mix(
+        in oklab,
+        var(--color-warning, #f59e0b) 75%,
+        transparent
+    );
     color: var(--fc-event-text-color);
 }
 
 .ms-full-calendar .full-calendar.fc .fc-event-success {
-    --fc-event-text-color: color-mix(in oklab, var(--color-success, #16a34a) 58%, var(--msfc-text));
+    --fc-event-text-color: color-mix(
+        in oklab,
+        var(--color-success, #16a34a) 58%,
+        var(--msfc-text)
+    );
     --fc-event-border-color: var(--color-success, #16a34a);
-    background: color-mix(in oklab, var(--color-success, #16a34a) 75%, transparent);
+    background: color-mix(
+        in oklab,
+        var(--color-success, #16a34a) 75%,
+        transparent
+    );
     color: var(--fc-event-text-color);
 }
 
 .ms-full-calendar .full-calendar.fc .fc-event-info {
-    --fc-event-text-color: color-mix(in oklab, var(--color-info, #0ea5e9) 54%, var(--msfc-text));
+    --fc-event-text-color: color-mix(
+        in oklab,
+        var(--color-info, #0ea5e9) 54%,
+        var(--msfc-text)
+    );
     --fc-event-border-color: var(--color-info, #0ea5e9);
-    background: color-mix(in oklab, var(--color-info, #0ea5e9) 75%, transparent);
+    background: color-mix(
+        in oklab,
+        var(--color-info, #0ea5e9) 75%,
+        transparent
+    );
     color: var(--fc-event-text-color);
 }
 
-.ms-full-calendar .full-calendar.fc .fc-daygrid-event-harness + .fc-daygrid-event-harness .fc-daygrid-event {
+.ms-full-calendar
+    .full-calendar.fc
+    .fc-daygrid-event-harness
+    + .fc-daygrid-event-harness
+    .fc-daygrid-event {
     margin-top: 0.375rem;
 }
 
@@ -288,7 +380,12 @@
     font-weight: 500;
 }
 
-.ms-full-calendar .full-calendar.fc .fc-view-harness .fc-daygrid-body .fc-daygrid-day .fc-daygrid-day-top {
+.ms-full-calendar
+    .full-calendar.fc
+    .fc-view-harness
+    .fc-daygrid-body
+    .fc-daygrid-day
+    .fc-daygrid-day-top {
     display: flex;
     flex-direction: row;
 }
@@ -302,7 +399,10 @@
     display: none;
 }
 
-.ms-full-calendar .full-calendar.fc .fc-daygrid-body-natural .fc-daygrid-day-events {
+.ms-full-calendar
+    .full-calendar.fc
+    .fc-daygrid-body-natural
+    .fc-daygrid-day-events {
     margin-top: 0.5rem !important;
     margin-bottom: 0.3rem !important;
 }
@@ -345,25 +445,42 @@
         var(--msfc-event-accent, var(--color-primary, #2563eb)) 75%,
         transparent
     ) !important;
-    border-color: var(--msfc-event-accent, var(--color-primary, #2563eb)) !important;
-    color: var(--msfc-event-custom-text, color-mix(
-        in oklab,
-        var(--msfc-event-accent, var(--color-primary, #2563eb)) 20%,
-        var(--msfc-text)
-    )) !important;
+    border-color: var(
+        --msfc-event-accent,
+        var(--color-primary, #2563eb)
+    ) !important;
+    color: var(
+        --msfc-event-custom-text,
+        color-mix(
+            in oklab,
+            var(--msfc-event-accent, var(--color-primary, #2563eb)) 20%,
+            var(--msfc-text)
+        )
+    ) !important;
 }
 
-.ms-full-calendar .full-calendar.fc .fc-event.msfc-event-custom-tonal .fc-event-main {
+.ms-full-calendar
+    .full-calendar.fc
+    .fc-event.msfc-event-custom-tonal
+    .fc-event-main {
     color: inherit;
 }
 
 .ms-full-calendar .full-calendar-loading {
-    background: color-mix(in oklab, var(--msfc-surface, #ffffff) 78%, transparent);
+    background: color-mix(
+        in oklab,
+        var(--msfc-surface, #ffffff) 78%,
+        transparent
+    );
     backdrop-filter: blur(3px);
 }
 
 .ms-full-calendar .full-calendar-loading__spinner {
-    border-color: color-mix(in oklab, var(--color-primary, #2563eb) 18%, transparent);
+    border-color: color-mix(
+        in oklab,
+        var(--color-primary, #2563eb) 18%,
+        transparent
+    );
     border-bottom-color: var(--color-primary, #2563eb);
 }
 
@@ -372,9 +489,14 @@
 }
 
 .ms-full-calendar .full-calendar-error__card {
-    border: 1px solid color-mix(in oklab, var(--color-error, #dc2626) 20%, transparent);
+    border: 1px solid
+        color-mix(in oklab, var(--color-error, #dc2626) 20%, transparent);
     border-radius: var(--radius-lg, 0.75rem);
-    background: color-mix(in oklab, var(--msfc-surface, #ffffff) 92%, transparent);
+    background: color-mix(
+        in oklab,
+        var(--msfc-surface, #ffffff) 92%,
+        transparent
+    );
     color: var(--color-base-text, var(--color-base-content, #111827));
     box-shadow: var(--msfc-shadow-lg);
 }
@@ -409,7 +531,8 @@
     max-width: min(300px, calc(100vw - 1rem));
     gap: 0.375rem;
     padding: 0.5rem;
-    border: 1px solid var(--color-base-stroke, var(--msfc-border, rgba(0, 0, 0, 0.12)));
+    border: 1px solid
+        var(--color-base-stroke, var(--msfc-border, rgba(0, 0, 0, 0.12)));
     border-radius: var(--radius-lg, 0.75rem);
     background: var(--color-base, #ffffff);
     color: var(--color-base-text, var(--color-base-content, #111827));
@@ -418,7 +541,9 @@
     isolation: isolate;
 }
 
-.ms-full-calendar .full-calendar-event-actions-dropdown__content :is(.btn, button, a) {
+.ms-full-calendar
+    .full-calendar-event-actions-dropdown__content
+    :is(.btn, button, a) {
     flex-shrink: 0;
     max-width: 100%;
     border-radius: var(--radius-md, 0.5rem);

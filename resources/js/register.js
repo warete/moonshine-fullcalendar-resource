@@ -3,4 +3,4 @@
  * Imports and registers the FullCalendar component
  */
 
-import './full-calendar.js';
+import "./full-calendar.js";
