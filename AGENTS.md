@@ -24,7 +24,15 @@ moonshine-fullcalendar-resource/
 │   ├── moonshine-patterns/   # MoonShine v4 patterns (custom)
 │   └── [other skills]
 ├── docs/                     # Project documentation
-│   └── project-description.md # Full project description
+│   ├── en/                   # English user documentation
+│   │   ├── usage.md          # Resource integration examples
+│   │   ├── configuration.md  # Calendar options and hooks
+│   │   └── api.md            # Route and payload reference
+│   ├── ru/                   # Russian user documentation
+│   │   ├── usage.md          # Примеры интеграции ресурса
+│   │   ├── configuration.md  # Опции календаря и хуки
+│   │   └── api.md            # Маршруты и payload'ы
+│   └── project-description.md # Internal project specification
 ├── public/                   # Compiled assets
 │   ├── css/
 │   │   └── full-calendar.css
@@ -69,7 +77,8 @@ moonshine-fullcalendar-resource/
 | `src/Providers/FullCalendarServiceProvider.php` | Main service provider, registers routes, views, components |
 | `routes/moonshine-fullcalendar.php` | Custom API routes for events |
 | `src/Http/Controllers/FullCalendarEventsController.php` | Events API controller |
-| `src/Components/` | Calendar UI component (MoonShine component, not Field) |
+| `src/Components/FullCalendarPageComponent.php` | Default MoonShine page list component |
+| `src/Components/FullCalendarViewComponent.php` | Render component for the calendar Blade view |
 | `public/js/full-calendar.js` | Alpine.js component for FullCalendar initialization |
 | `public/css/full-calendar.css` | Calendar-specific styles |
 | `vite.config.js` | Frontend build configuration |
@@ -78,9 +87,15 @@ moonshine-fullcalendar-resource/
 
 | Document | Path | Description |
 |----------|------|-------------|
-| Project Description | `docs/project-description.md` | Full MVP specification, architecture, API contract |
-| README | `README.md` | Package overview and installation |
-| AGENTS.md | `AGENTS.md` | This file — project structure map |
+| README | `README.md` | Project landing page |
+| English Usage | `docs/en/usage.md` | English usage guide |
+| English Configuration | `docs/en/configuration.md` | English config guide |
+| English API Reference | `docs/en/api.md` | English API guide |
+| Russian Usage | `docs/ru/usage.md` | Russian usage guide |
+| Russian Configuration | `docs/ru/configuration.md` | Russian config guide |
+| Russian API Reference | `docs/ru/api.md` | Russian API guide |
+| Project Description | `docs/project-description.md` | Internal MVP specification |
+| AGENTS.md | `AGENTS.md` | Project structure map |
 
 ## AI Context Files
 
@@ -91,6 +106,10 @@ moonshine-fullcalendar-resource/
 | .claude/skills/moonshine-patterns/SKILL.md | MoonShine v4 patterns for this project |
 
 ## Development Notes
+
+### Documentation Maintenance
+- User-facing documentation is maintained in two languages: English (`docs/en`) and Russian (`docs/ru`)
+- Any future documentation change should be reflected in both language trees unless explicitly documented otherwise
 
 ### Component Architecture
 - The calendar is a **MoonShine UI Component**, NOT a Field
@@ -105,9 +124,9 @@ moonshine-fullcalendar-resource/
 3. **Async Loading**: Events load dynamically based on visible date range
 4. **Event Refresh**: Calendar refetches after CRUD operations
 
-### API Endpoints (to be implemented)
-- `GET /resource-uri/api/events` - Fetch events by date range
-- `PATCH /resource-uri/api/events/{id}/dates` - Update event dates (for drag & drop)
+### API Endpoints
+- `GET /admin/resource/{resourceUri}/full-calendar/events` - Fetch events by date range
+- `PATCH /admin/resource/{resourceUri}/full-calendar/events/{resourceItem}/dates` - Update event dates (drag/drop and resize)
 
 ### Event Data Structure
 ```php
