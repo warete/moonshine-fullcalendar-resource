@@ -97,7 +97,7 @@ export function registerFullCalendar() {
         return;
     }
 
-    Alpine.data('fullCalendar', (props = {}) => ({
+    const fullCalendarFactory = (props = {}) => ({
         calendar: null,
         loading: false,
         error: null,
@@ -179,6 +179,8 @@ export function registerFullCalendar() {
             }
 
             // Build FullCalendar config
+            const userEventDidMount = normalizedConfig.eventDidMount;
+
             const calendarConfig = {
                 ...normalizedConfig,
                 plugins: [dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin],
@@ -208,6 +210,14 @@ export function registerFullCalendar() {
                 loading: (isLoading) => {
                     this.loading = isLoading;
                     this.log('debug', 'Calendar loading state', { isLoading });
+                },
+
+                eventDidMount: (info) => {
+                    this.applyEventTonalStyle(info);
+
+                    if (typeof userEventDidMount === 'function') {
+                        userEventDidMount(info);
+                    }
                 },
 
                 // View change handler
@@ -243,6 +253,34 @@ export function registerFullCalendar() {
                     stack: error.stack
                 });
                 this.error = error.message;
+            }
+        },
+
+        applyEventTonalStyle(info) {
+            const el = info?.el;
+            const event = info?.event;
+
+            if (!el || !event) {
+                return;
+            }
+
+            const accentColor = event.backgroundColor || event.borderColor || event.extendedProps?.color || event.color;
+            const textColor = event.textColor || event.extendedProps?.textColor || null;
+
+            if (!accentColor) {
+                el.classList.remove('msfc-event-custom-tonal');
+                el.style.removeProperty('--msfc-event-accent');
+                el.style.removeProperty('--msfc-event-custom-text');
+                return;
+            }
+
+            el.classList.add('msfc-event-custom-tonal');
+            el.style.setProperty('--msfc-event-accent', accentColor);
+
+            if (textColor) {
+                el.style.setProperty('--msfc-event-custom-text', textColor);
+            } else {
+                el.style.removeProperty('--msfc-event-custom-text');
             }
         },
 
@@ -1489,7 +1527,11 @@ export function registerFullCalendar() {
                     break;
             }
         }
-    }));
+    });
+
+    // Support Blade usage x-data="fullCalendar({...})" when script is loaded via MoonShine asset manager.
+    window.fullCalendar = fullCalendarFactory;
+    Alpine.data('fullCalendar', fullCalendarFactory);
 }
 
 /**

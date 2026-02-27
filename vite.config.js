@@ -1,6 +1,23 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+    plugins: [
+        {
+            name: 'emit-full-calendar-css-asset',
+            generateBundle() {
+                this.emitFile({
+                    type: 'asset',
+                    fileName: 'css/full-calendar.css',
+                    source: fs.readFileSync(
+                        path.resolve(__dirname, 'resources/css/full-calendar.css'),
+                        'utf8'
+                    ),
+                });
+            },
+        },
+    ],
     build: {
         emptyOutDir: false,
         manifest: true,

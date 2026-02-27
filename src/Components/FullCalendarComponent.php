@@ -6,6 +6,8 @@ namespace Warete\MoonShineFullCalendar\Components;
 
 use Illuminate\Contracts\Support\Renderable;
 use Illuminate\Support\Facades\Log;
+use MoonShine\AssetManager\Css;
+use MoonShine\AssetManager\Js;
 use MoonShine\Contracts\Core\DependencyInjection\CoreContract;
 use MoonShine\Contracts\Core\DependencyInjection\FieldsContract;
 use MoonShine\Contracts\UI\ComponentContract;
@@ -95,13 +97,26 @@ final class FullCalendarComponent implements DefaultListComponentContract
                 CoreContract $core,
                 private readonly string $logLevel = 'info'
             ) {
-                parent::__construct($name);
                 $this->setCore($core);
+                parent::__construct($name);
 
                 $this->log('debug', 'Calendar UI component created', [
                     'name' => $name,
                     'resource' => get_class($resource),
                 ]);
+            }
+
+            /**
+             * Register package assets via MoonShine asset manager so CSS is injected in layout head.
+             *
+             * @return list<\MoonShine\Contracts\AssetManager\AssetElementContract>
+             */
+            protected function assets(): array
+            {
+                return [
+                    Css::make('/vendor/moonshine-fullcalendar/css/full-calendar.css')->defer(),
+                    Js::make('/vendor/moonshine-fullcalendar/js/full-calendar.js'),
+                ];
             }
 
             public function getName(): string
