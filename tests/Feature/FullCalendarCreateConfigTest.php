@@ -6,7 +6,6 @@ namespace Warete\MoonShineFullCalendar\Tests\Feature;
 
 use MoonShine\Contracts\UI\FieldContract;
 use MoonShine\Laravel\Models\MoonshineUser;
-use MoonShine\Laravel\Resources\ModelResource;
 use MoonShine\UI\Fields\Date;
 use PHPUnit\Framework\Attributes\Test;
 use Warete\MoonShineFullCalendar\Resources\FullCalendarResource;
