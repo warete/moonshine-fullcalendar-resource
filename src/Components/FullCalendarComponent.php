@@ -134,10 +134,12 @@ final class FullCalendarComponent implements DefaultListComponentContract
                 $data = parent::data();
 
                 $calendarConfig = $this->resource->getCalendarConfig();
+                $calendarCreateTrigger = $this->renderCalendarCreateTrigger();
 
                 $this->log('debug', 'Calendar view data prepared', [
                     'config_keys' => array_keys($calendarConfig),
                     'async' => $this->page->isAsync(),
+                    'create_trigger_enabled' => $calendarCreateTrigger !== null,
                 ]);
 
                 $endpoint = $this->resource->getEventsEndpoint();
@@ -148,10 +150,62 @@ final class FullCalendarComponent implements DefaultListComponentContract
 
                 return array_merge($data, [
                     'calendarConfig' => $calendarConfig,
+                    'calendarCreateTrigger' => $calendarCreateTrigger,
                     'resource' => $this->resource,
                     'async' => $this->page->isAsync(),
                     'endpoint' => $endpoint,
                 ]);
+            }
+
+            protected function renderCalendarCreateTrigger(): ?string
+            {
+                $createConfig = $this->resource->getCalendarCreateConfig();
+
+                if (($createConfig['enabled'] ?? false) !== true) {
+                    $this->log('debug', 'Calendar create trigger skipped', [
+                        'resource' => $this->resource->getUriKey(),
+                        'reason' => 'create-config-disabled',
+                    ]);
+
+                    return null;
+                }
+
+                try {
+                    $button = $this->resource->getCreateButton(
+                        componentName: $this->name,
+                        isAsync: true,
+                        modalName: $this->resource->getCalendarCreateModalName(),
+                    )->customAttributes([
+                        'x-ref' => 'calendarCreateTrigger',
+                        'data-calendar-create-trigger' => 'true',
+                        'aria-hidden' => 'true',
+                        'tabindex' => '-1',
+                    ])->class('hidden');
+
+                    $html = trim((string) $button);
+
+                    if ($html === '') {
+                        $this->log('warning', 'Calendar create trigger rendered empty HTML', [
+                            'resource' => $this->resource->getUriKey(),
+                        ]);
+
+                        return null;
+                    }
+
+                    $this->log('info', 'Calendar create trigger rendered', [
+                        'resource' => $this->resource->getUriKey(),
+                        'modalName' => $this->resource->getCalendarCreateModalName(),
+                    ]);
+
+                    return $html;
+                } catch (\Throwable $e) {
+                    $this->log('error', 'Failed to render calendar create trigger', [
+                        'resource' => $this->resource->getUriKey(),
+                        'error' => $e->getMessage(),
+                    ]);
+
+                    return null;
+                }
             }
 
             protected function log(string $level, string $message, array $context = []): void

@@ -9,13 +9,18 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use MoonShine\Contracts\Core\DependencyInjection\CrudRequestContract;
 use MoonShine\Contracts\Core\DependencyInjection\CoreContract;
+use MoonShine\Contracts\Core\DependencyInjection\FieldsContract;
 use MoonShine\Contracts\UI\ActionButtonContract;
+use MoonShine\Contracts\UI\FieldContract;
 use MoonShine\Crud\Buttons\DeleteButton;
 use MoonShine\Crud\Buttons\EditButton;
 use MoonShine\Crud\JsonResponse;
 use MoonShine\Laravel\Resources\ModelResource;
 use MoonShine\Laravel\TypeCasts\ModelDataWrapper;
+use MoonShine\Contracts\UI\ModalContract;
 use MoonShine\Support\AlpineJs;
+use MoonShine\Support\Enums\Ability;
+use MoonShine\Support\Enums\Action;
 use MoonShine\Support\Enums\HttpMethod;
 use MoonShine\Support\Enums\ToastType;
 use Symfony\Component\HttpFoundation\Response;
@@ -30,6 +35,12 @@ use Symfony\Component\HttpFoundation\Response;
  */
 abstract class FullCalendarResource extends ModelResource
 {
+    /**
+     * Calendar resources usually create records from date clicks, so modal create is on by default.
+     * Consumers can opt out by overriding this property in their resource.
+     */
+    protected bool $createInModal = true;
+
     /**
      * Calendar resources usually need async modal editing for event-click actions.
      * Consumers can opt out by overriding this property in their resource.
@@ -104,6 +115,13 @@ abstract class FullCalendarResource extends ModelResource
     protected string $calendarEventPayloadKey = 'moonshineFullCalendar';
 
     protected string $calendarEventDateUpdateIdPlaceholder = '__RESOURCE_ITEM__';
+
+    protected string $calendarCreateModalName = 'resource-create-modal-calendar-grid';
+
+    /**
+     * When enabled, create-from-grid opens only on the second click on a date cell/slot.
+     */
+    protected bool $createFromGridOnDoubleClick = true;
 
     public function __construct(CoreContract $core)
     {
@@ -776,6 +794,7 @@ abstract class FullCalendarResource extends ModelResource
                 'method' => 'PATCH',
                 'idPlaceholder' => $this->calendarEventDateUpdateIdPlaceholder,
             ],
+            'createFromGrid' => $this->getCalendarCreateConfig(),
         ], $this->calendarOptions);
 
         $this->log('debug', 'Calendar config generated', [
@@ -783,6 +802,102 @@ abstract class FullCalendarResource extends ModelResource
         ]);
 
         return $config;
+    }
+
+    /**
+     * @return array{
+     *     enabled: bool,
+     *     modalName: string,
+     *     startParam: string,
+     *     endParam: string,
+     *     openOnDoubleClick: bool,
+     *     timedFallbackDurationMinutes: int,
+     *     allDayFallbackDurationDays: int
+     * }
+     */
+    public function getCalendarCreateConfig(): array
+    {
+        $enabled = false;
+        $reason = 'available';
+
+        if ($this->getFormPage() === null) {
+            $reason = 'missing-form-page';
+        } elseif (! $this->isCreateInModal()) {
+            $reason = 'create-in-modal-disabled';
+        } elseif (! $this->hasAction(Action::CREATE)) {
+            $reason = 'action-disabled';
+        } elseif (! $this->can(Ability::CREATE)) {
+            $reason = 'ability-denied';
+        } else {
+            $enabled = true;
+        }
+
+        $config = [
+            'enabled' => $enabled,
+            'modalName' => $this->calendarCreateModalName,
+            'startParam' => $this->startColumn,
+            'endParam' => $this->endColumn,
+            'openOnDoubleClick' => $this->createFromGridOnDoubleClick,
+            'timedFallbackDurationMinutes' => 60,
+            'allDayFallbackDurationDays' => 1,
+        ];
+
+        $this->log($enabled ? 'info' : 'warning', 'Calendar create-from-grid config generated', [
+            'resource' => $this->getUriKey(),
+            'enabled' => $enabled,
+            'reason' => $reason,
+            'modalName' => $config['modalName'],
+            'startParam' => $config['startParam'],
+            'endParam' => $config['endParam'],
+            'openOnDoubleClick' => $config['openOnDoubleClick'],
+        ]);
+
+        return $config;
+    }
+
+    public function getCalendarCreateModalName(): string
+    {
+        return $this->calendarCreateModalName;
+    }
+
+    public function getFormFields(bool $withOutside = false): FieldsContract
+    {
+        $fields = parent::getFormFields($withOutside);
+
+        if ($this->isItemExists()) {
+            return $fields;
+        }
+
+        $prefill = array_filter([
+            $this->startColumn => $this->getCore()->getRequest()->getScalar($this->startColumn),
+            $this->endColumn => $this->getCore()->getRequest()->getScalar($this->endColumn),
+        ], static fn (mixed $value): bool => $value !== null && $value !== '');
+
+        if ($prefill === []) {
+            return $fields;
+        }
+
+        $fields->onlyFields()->each(
+            static function (FieldContract $field) use ($prefill): void {
+                $column = $field->getColumn();
+
+                if (array_key_exists($column, $prefill)) {
+                    $field->fill($prefill[$column]);
+                }
+            }
+        );
+
+        $this->log('info', '[FIX][create-from-grid] Create form fields prefilled from request', [
+            'resource' => $this->getUriKey(),
+            'prefilledColumns' => array_keys($prefill),
+        ]);
+
+        return $fields;
+    }
+
+    public function resolveCreateModal(ModalContract $modal): ModalContract
+    {
+        return parent::resolveCreateModal($modal)->alwaysLoad();
     }
 
     /**

@@ -9,6 +9,7 @@ import timeGridPlugin from '@fullcalendar/timegrid';
 import listPlugin from '@fullcalendar/list';
 import interactionPlugin from '@fullcalendar/interaction';
 import ruLocale from '@fullcalendar/core/locales/ru';
+import loadAsyncContent from '../../vendor/moonshine/moonshine/src/UI/resources/js/Support/AsyncLoadContent.js';
 
 /**
  * Locale registry for FullCalendar
@@ -123,6 +124,11 @@ export function registerFullCalendar() {
         dropdownAnchorEl: null,
         dropdownAnchorClickOffsetX: null,
         pendingDateMutationByEventId: {},
+        lastCreateFromGridSignature: null,
+        lastCreateFromGridAt: 0,
+        lastCreateFromGridStartIso: null,
+        lastCreateFromGridAllDay: null,
+        lastCreateFromGridSource: null,
 
         // Props
         config: props.config || {},
@@ -1371,12 +1377,306 @@ export function registerFullCalendar() {
             }
         },
 
+        getCreateFromGridConfig() {
+            const config = this.config?.createFromGrid ?? {};
+
+            return {
+                enabled: config.enabled === true,
+                modalName: typeof config.modalName === 'string' && config.modalName !== '' ? config.modalName : 'resource-create-modal',
+                startParam: typeof config.startParam === 'string' && config.startParam !== '' ? config.startParam : 'start',
+                endParam: typeof config.endParam === 'string' && config.endParam !== '' ? config.endParam : 'end',
+                openOnDoubleClick: config.openOnDoubleClick === true,
+                timedFallbackDurationMinutes: Number(config.timedFallbackDurationMinutes || 60),
+                allDayFallbackDurationDays: Number(config.allDayFallbackDurationDays || 1),
+            };
+        },
+
+        getCalendarCreateTrigger() {
+            const trigger = this.$refs?.calendarCreateTrigger ?? this.$el.querySelector('[data-calendar-create-trigger="true"]');
+
+            if (!trigger) {
+                this.log('warn', '[create-from-grid] Hidden create trigger not found');
+            }
+
+            return trigger;
+        },
+
+        getCalendarCreateModalController(modalName) {
+            const controller = Array.from(document.querySelectorAll('[data-teleport-target="true"][x-data]')).find((el) =>
+                typeof el.innerHTML === 'string' && el.innerHTML.includes(`modal_toggled:${modalName}`)
+            );
+
+            if (!controller) {
+                this.log('warn', '[create-from-grid] Modal controller not found', {
+                    modalName
+                });
+            }
+
+            return controller || null;
+        },
+
+        patchCalendarCreateModalController(modalController, modalName) {
+            const modalData = modalController?._x_dataStack?.[0] ?? null;
+
+            if (!modalData || modalData.__calendarDynamicAsyncUrlPatched) {
+                return modalData;
+            }
+
+            if (typeof modalData.toggleModal !== 'function') {
+                this.log('warn', '[create-from-grid] Modal toggle handler unavailable for patch', {
+                    modalName
+                });
+
+                return modalData;
+            }
+
+            modalData.toggleModal = async function toggleCalendarModal() {
+                this.open = !this.open;
+
+                if (this.open && this.asyncUrl && !this.asyncLoaded) {
+                    await loadAsyncContent(this.asyncUrl, this.id);
+
+                    this.asyncLoaded = !this.$root.dataset.alwaysLoad;
+                }
+
+                this.dispatchEvents();
+            };
+
+            modalData.__calendarDynamicAsyncUrlPatched = true;
+
+            this.log('info', '[FIX][create-from-grid] Modal toggle patched for dynamic asyncUrl', {
+                modalName
+            });
+
+            return modalData;
+        },
+
+        getDefaultCreateEnd(startDate, allDay, config) {
+            if (!(startDate instanceof Date) || Number.isNaN(startDate.getTime())) {
+                return null;
+            }
+
+            const fallback = new Date(startDate.getTime());
+
+            if (allDay) {
+                fallback.setDate(fallback.getDate() + Math.max(1, config.allDayFallbackDurationDays));
+                return fallback;
+            }
+
+            fallback.setMinutes(fallback.getMinutes() + Math.max(1, config.timedFallbackDurationMinutes));
+
+            return fallback;
+        },
+
+        getCreateFromGridSignature(range, resolvedEnd = null) {
+            const startIso = range?.start instanceof Date ? range.start.toISOString() : null;
+            const endIso = resolvedEnd instanceof Date && !Number.isNaN(resolvedEnd.getTime())
+                ? resolvedEnd.toISOString()
+                : null;
+
+            return JSON.stringify({
+                start: startIso,
+                end: endIso,
+                allDay: Boolean(range?.allDay)
+            });
+        },
+
+        buildCreateTriggerUrl(range) {
+            const config = this.getCreateFromGridConfig();
+            const trigger = this.getCalendarCreateTrigger();
+
+            if (!config.enabled || !trigger) {
+                this.log('warn', '[create-from-grid] Build skipped', {
+                    enabled: config.enabled,
+                    triggerFound: !!trigger
+                });
+
+                return null;
+            }
+
+            const startDate = range?.start instanceof Date ? range.start : null;
+            if (!startDate) {
+                this.log('warn', '[create-from-grid] Missing start date', {
+                    source: range?.source ?? 'unknown'
+                });
+
+                return null;
+            }
+
+            const baseHref = trigger.dataset.baseHref || trigger.getAttribute('href') || '';
+            if (!baseHref) {
+                this.log('warn', '[create-from-grid] Trigger has no base href');
+                return null;
+            }
+
+            if (!trigger.dataset.baseHref) {
+                trigger.dataset.baseHref = baseHref;
+            }
+
+            const endDate = range?.end instanceof Date
+                ? range.end
+                : this.getDefaultCreateEnd(startDate, Boolean(range?.allDay), config);
+            const signature = this.getCreateFromGridSignature(range, endDate);
+            const now = Date.now();
+            const startIso = startDate.toISOString();
+            const allDay = Boolean(range?.allDay);
+
+            if (
+                this.lastCreateFromGridSignature === signature
+                && now - this.lastCreateFromGridAt < 500
+            ) {
+                this.log('info', '[FIX][create-from-grid] Duplicate create open suppressed', {
+                    source: range?.source ?? 'unknown',
+                    resourceUri: this.resourceUri,
+                    signature,
+                    elapsedMs: now - this.lastCreateFromGridAt
+                });
+
+                return null;
+            }
+
+            if (
+                range?.source === 'dateClick'
+                && this.lastCreateFromGridSource === 'select'
+                && this.lastCreateFromGridStartIso === startIso
+                && this.lastCreateFromGridAllDay === allDay
+                && now - this.lastCreateFromGridAt < 500
+            ) {
+                this.log('info', '[FIX][create-from-grid] Date click suppressed after select', {
+                    source: range.source,
+                    resourceUri: this.resourceUri,
+                    start: startIso,
+                    elapsedMs: now - this.lastCreateFromGridAt,
+                    previousSource: this.lastCreateFromGridSource
+                });
+
+                return null;
+            }
+
+            const url = new URL(baseHref, window.location.origin);
+            url.searchParams.set(config.startParam, startDate.toISOString());
+
+            if (endDate instanceof Date && !Number.isNaN(endDate.getTime())) {
+                url.searchParams.set(config.endParam, endDate.toISOString());
+            } else {
+                url.searchParams.delete(config.endParam);
+            }
+
+            this.log('info', '[create-from-grid] Create modal URL prepared', {
+                source: range?.source ?? 'unknown',
+                resourceUri: this.resourceUri,
+                start: startIso,
+                end: endDate instanceof Date && !Number.isNaN(endDate.getTime()) ? endDate.toISOString() : null,
+                allDay,
+                finalUrl: url.toString(),
+                modalName: config.modalName
+            });
+
+            this.lastCreateFromGridSignature = signature;
+            this.lastCreateFromGridAt = now;
+            this.lastCreateFromGridStartIso = startIso;
+            this.lastCreateFromGridAllDay = allDay;
+            this.lastCreateFromGridSource = range?.source ?? 'unknown';
+
+            return {
+                trigger,
+                config,
+                url: url.toString(),
+            };
+        },
+
+        openCreateModalFromGrid(range) {
+            const prepared = this.buildCreateTriggerUrl(range);
+
+            if (!prepared) {
+                return false;
+            }
+
+            try {
+                prepared.trigger.setAttribute('href', prepared.url);
+                const modalController = this.getCalendarCreateModalController(prepared.config.modalName);
+                const modalData = this.patchCalendarCreateModalController(
+                    modalController,
+                    prepared.config.modalName
+                );
+
+                if (modalData && Object.prototype.hasOwnProperty.call(modalData, 'asyncUrl')) {
+                    modalData.asyncUrl = prepared.url;
+
+                    if (Object.prototype.hasOwnProperty.call(modalData, 'asyncLoaded')) {
+                        modalData.asyncLoaded = false;
+                    }
+
+                    this.log('info', '[FIX][create-from-grid] Modal asyncUrl updated before open', {
+                        source: range?.source ?? 'unknown',
+                        resourceUri: this.resourceUri,
+                        modalName: prepared.config.modalName,
+                        asyncUrl: prepared.url,
+                    });
+                }
+
+                window.setTimeout(() => {
+                    try {
+                        window.dispatchEvent(new CustomEvent(`modal_toggled:${prepared.config.modalName}`));
+
+                        this.log('info', '[FIX][create-from-grid] Modal toggled after deferred tick', {
+                            source: range?.source ?? 'unknown',
+                            resourceUri: this.resourceUri,
+                            modalName: prepared.config.modalName,
+                        });
+                    } catch (error) {
+                        this.log('error', '[FIX][create-from-grid] Deferred modal toggle failed', {
+                            source: range?.source ?? 'unknown',
+                            error: error.message,
+                            stack: error.stack
+                        });
+                    }
+                }, 0);
+
+                return true;
+            } catch (error) {
+                this.log('error', '[create-from-grid] Failed to open create modal', {
+                    source: range?.source ?? 'unknown',
+                    error: error.message,
+                    stack: error.stack
+                });
+
+                return false;
+            }
+        },
+
         /**
          * Handle date click
          */
         handleDateClick(info) {
+            const createConfig = this.getCreateFromGridConfig();
+
             this.log('debug', 'Date clicked', {
-                date: info.date.toISOString()
+                date: info.date.toISOString(),
+                allDay: info.allDay,
+                clickCount: info.jsEvent?.detail ?? null,
+                openOnDoubleClick: createConfig.openOnDoubleClick,
+            });
+
+            if (createConfig.openOnDoubleClick && (info.jsEvent?.detail ?? 0) < 2) {
+                this.log('info', '[create-from-grid] Single click ignored because double click is required', {
+                    date: info.date.toISOString(),
+                    allDay: info.allDay,
+                    clickCount: info.jsEvent?.detail ?? 0,
+                });
+
+                if (window.moonshineFullCalendarDateClick) {
+                    window.moonshineFullCalendarDateClick(info);
+                }
+
+                return;
+            }
+
+            this.openCreateModalFromGrid({
+                start: info.date,
+                end: null,
+                allDay: info.allDay === true,
+                source: 'dateClick'
             });
 
             if (window.moonshineFullCalendarDateClick) {
@@ -1388,10 +1688,29 @@ export function registerFullCalendar() {
          * Handle date select
          */
         handleDateSelect(info) {
+            const createConfig = this.getCreateFromGridConfig();
+
             this.log('debug', 'Date range selected', {
                 start: info.start.toISOString(),
-                end: info.end.toISOString()
+                end: info.end.toISOString(),
+                allDay: info.allDay,
+                openOnDoubleClick: createConfig.openOnDoubleClick,
             });
+
+            if (!createConfig.openOnDoubleClick) {
+                this.openCreateModalFromGrid({
+                    start: info.start,
+                    end: info.end,
+                    allDay: info.allDay === true,
+                    source: 'select'
+                });
+            } else {
+                this.log('info', '[create-from-grid] Range select ignored because double click is required', {
+                    start: info.start.toISOString(),
+                    end: info.end.toISOString(),
+                    allDay: info.allDay,
+                });
+            }
 
             // Clear selection
             this.calendar.unselect();

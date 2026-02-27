@@ -1,5 +1,6 @@
 @props([
     'calendarConfig' => [],
+    'calendarCreateTrigger' => null,
     'async' => false,
     'endpoint' => '',
     'resource' => null,
@@ -88,4 +89,10 @@
             window.moonshineFullCalendarRefresh = false;
         }
     })}"></div>
+
+    @if($calendarCreateTrigger)
+        <div class="hidden" aria-hidden="true">
+            {!! $calendarCreateTrigger !!}
+        </div>
+    @endif
 </div>
