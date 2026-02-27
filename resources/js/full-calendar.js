@@ -9,7 +9,6 @@ import timeGridPlugin from "@fullcalendar/timegrid";
 import listPlugin from "@fullcalendar/list";
 import interactionPlugin from "@fullcalendar/interaction";
 import ruLocale from "@fullcalendar/core/locales/ru";
-import loadAsyncContent from "../../vendor/moonshine/moonshine/src/UI/resources/js/Support/AsyncLoadContent.js";
 
 /**
  * Locale registry for FullCalendar
@@ -78,6 +77,50 @@ function parseMoonShineEventString(eventsValue) {
             return { eventName, detail };
         })
         .filter((entry) => entry.eventName !== "");
+}
+
+async function loadAsyncModalContent(url, id) {
+    const containerElement = document.getElementById(id);
+
+    if (!containerElement || !url) {
+        return;
+    }
+
+    const response = await fetch(url, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: {
+            "X-Requested-With": "XMLHttpRequest",
+        },
+    });
+
+    if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const payload = await response.text();
+    let html = payload;
+
+    try {
+        const parsedPayload = JSON.parse(payload);
+        html = parsedPayload?.html ?? payload;
+    } catch (error) {}
+
+    containerElement.innerHTML = html;
+
+    const scriptElements = containerElement.querySelectorAll("script");
+
+    Array.from(scriptElements).forEach((scriptElement) => {
+        const clonedElement = document.createElement("script");
+
+        Array.from(scriptElement.attributes).forEach((attribute) => {
+            clonedElement.setAttribute(attribute.name, attribute.value);
+        });
+
+        clonedElement.text = scriptElement.text;
+
+        scriptElement.parentNode?.replaceChild(clonedElement, scriptElement);
+    });
 }
 
 /**
@@ -1247,7 +1290,7 @@ export function registerFullCalendar() {
                 this.open = !this.open;
 
                 if (this.open && this.asyncUrl && !this.asyncLoaded) {
-                    await loadAsyncContent(this.asyncUrl, this.id);
+                    await loadAsyncModalContent(this.asyncUrl, this.id);
 
                     this.asyncLoaded = !this.$root.dataset.alwaysLoad;
                 }
