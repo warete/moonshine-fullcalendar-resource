@@ -44,6 +44,8 @@ The exact admin prefix is controlled by MoonShine, but the resource-scoped suffi
 ]
 ```
 
+Only `extendedProps.moonshineFullCalendar.actions` is guaranteed by default. Any other `extendedProps` keys appear only if your resource explicitly returns them from `getCalendarEventExtendedProps(Model $item): array`.
+
 ## Date Update Request
 
 ```json
@@ -68,6 +70,7 @@ Validation rules:
 
 - Success: `200 OK` with a MoonShine JSON response and a success toast
 - Validation error: `422 Unprocessable Entity` with `message`, `messageType`, and `errors`
+- Forbidden: `403 Forbidden` when the resource is not editable or the current user cannot perform `UPDATE`
 - Resource denial or not found: resource-controlled error status and message
 
 Successful date updates also append the `fullcalendar:refresh` browser event for the current resource.

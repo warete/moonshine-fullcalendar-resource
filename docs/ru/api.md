@@ -44,6 +44,8 @@
 ]
 ```
 
+По умолчанию гарантирован только `extendedProps.moonshineFullCalendar.actions`. Любые другие ключи в `extendedProps` появляются только если ресурс явно возвращает их из `getCalendarEventExtendedProps(Model $item): array`.
+
 ## Запрос на обновление дат
 
 ```json
@@ -68,6 +70,7 @@
 
 - Успех: `200 OK` с MoonShine JSON response и сообщением об успешном сохранении
 - Ошибка валидации: `422 Unprocessable Entity` с `message`, `messageType` и `errors`
+- Запрет: `403 Forbidden`, если ресурс не editable или текущему пользователю недоступно действие `UPDATE`
 - Запрет или отсутствие ресурса: код и сообщение определяются ресурсом
 
 При успешном обновлении дат также добавляется браузерное событие `fullcalendar:refresh` для текущего ресурса.

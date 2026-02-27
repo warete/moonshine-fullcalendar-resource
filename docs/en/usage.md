@@ -124,18 +124,12 @@ final class CalendarEventsResource extends FullCalendarResource
             ->setTimezone(config('app.timezone'));
     }
 
-    protected function formatEvent(Model $item): array
+    protected function getCalendarEventExtendedProps(Model $item): array
     {
-        $event = parent::formatEvent($item);
-
-        $event['backgroundColor'] = $item->color ?? '#3b82f6';
-        $event['borderColor'] = $item->color ?? '#2563eb';
-        $event['extendedProps'] = [
+        return [
             'description' => $item->description,
             'location' => $item->location ?? null,
         ];
-
-        return $event;
     }
 }
 ```
@@ -143,6 +137,10 @@ final class CalendarEventsResource extends FullCalendarResource
 ## Per-Event Actions
 
 Override `getCustomCalendarEventActions(Model $item): iterable` to append additional MoonShine action buttons to the event dropdown.
+
+## Extra Event Payload
+
+`extendedProps` are opt-in. By default, the package only adds `extendedProps.moonshineFullCalendar.actions`. Override `getCalendarEventExtendedProps(Model $item): array` when you want to expose additional browser-visible values.
 
 ## Advanced Page Customization
 

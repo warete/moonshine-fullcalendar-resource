@@ -124,18 +124,12 @@ final class CalendarEventsResource extends FullCalendarResource
             ->setTimezone(config('app.timezone'));
     }
 
-    protected function formatEvent(Model $item): array
+    protected function getCalendarEventExtendedProps(Model $item): array
     {
-        $event = parent::formatEvent($item);
-
-        $event['backgroundColor'] = $item->color ?? '#3b82f6';
-        $event['borderColor'] = $item->color ?? '#2563eb';
-        $event['extendedProps'] = [
+        return [
             'description' => $item->description,
             'location' => $item->location ?? null,
         ];
-
-        return $event;
     }
 }
 ```
@@ -143,6 +137,10 @@ final class CalendarEventsResource extends FullCalendarResource
 ## Действия для событий
 
 Переопределите `getCustomCalendarEventActions(Model $item): iterable`, чтобы добавить свои `ActionButton` в выпадающий список действий события.
+
+## Дополнительный payload события
+
+`extendedProps` теперь работает по opt-in. По умолчанию пакет добавляет только `extendedProps.moonshineFullCalendar.actions`. Переопределите `getCalendarEventExtendedProps(Model $item): array`, если хотите явно отдать дополнительные значения в браузер.
 
 ## Кастомизация страницы
 

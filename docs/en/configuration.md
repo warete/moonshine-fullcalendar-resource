@@ -59,11 +59,18 @@ Calendar-to-modal creation is configured through resource properties.
 - Display timezone defaults to `config('app.timezone')`.
 - The frontend normalizes legacy `timezone` config into FullCalendar's `timeZone`.
 - Incoming drag/drop and resize payloads are normalized back into the configured timezone before save.
+- Date updates are accepted only when the resource is editable and the current user can perform the `UPDATE` action.
+
+## Extended Props Policy
+
+- `extendedProps` are empty by default, except for `moonshineFullCalendar.actions`.
+- Override `getCalendarEventExtendedProps(Model $item): array` to expose an explicit allowlist of extra values.
 
 ## Hooks You Can Override
 
 - `fetchEvents(?string $start, ?string $end, array $params): iterable`
 - `formatEvent(Model $item): array`
+- `getCalendarEventExtendedProps(Model $item): array`
 - `getCustomCalendarEventActions(Model $item): iterable`
 - `applyCalendarEventDateUpdate(Model $item, string $start, ?string $end, array $payload, ?CrudRequestContract $request = null): void`
 

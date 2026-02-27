@@ -12,7 +12,7 @@
 
 > FullCalendar-powered MoonShine resource pages with async loading, modal CRUD flows, and resource-scoped refresh.
 
-`warete/moonshine-fullcalendar-resource` adds a reusable calendar index page for MoonShine v4 resources. It keeps the standard MoonShine CRUD flow, loads events asynchronously, supports event-specific action dropdowns, and refreshes the active calendar after create, update, delete, and date mutations.
+`warete/moonshine-fullcalendar-resource` adds a reusable calendar index page for MoonShine v4 resources. It keeps the standard MoonShine CRUD flow, loads events asynchronously, supports event-specific action dropdowns, and refreshes the active calendar after create, update, delete, and date mutations. Extra `extendedProps` are opt-in, so only explicitly exposed values reach the browser.
 
 **Languages:** [English](README.md) | [Русский](docs/ru/usage.md)
 
@@ -117,6 +117,20 @@ protected function getCustomCalendarEventActions(Model $item): iterable
         ActionButton::make('Duplicate', route('events.duplicate', $item))
             ->primary()
             ->async(),
+    ];
+}
+```
+
+## Event Payload
+
+By default, the package only ships the standard FullCalendar fields plus `extendedProps.moonshineFullCalendar.actions`. To expose extra browser-visible metadata, override `getCalendarEventExtendedProps(Model $item): array` and return an explicit allowlist.
+
+```php
+protected function getCalendarEventExtendedProps(Model $item): array
+{
+    return [
+        'description' => $item->description,
+        'location' => $item->location,
     ];
 }
 ```

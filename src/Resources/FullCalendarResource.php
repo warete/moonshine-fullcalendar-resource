@@ -255,13 +255,8 @@ abstract class FullCalendarResource extends ModelResource
             $event['description'] = $item->getAttribute('body');
         }
 
-        // Add extended props for any additional attributes
-        $extendedProps = [];
-        foreach ($item->getAttributes() as $key => $value) {
-            if (! in_array($key, [$item->getKeyName(), $this->getColumn(), $this->startColumn, $this->endColumn, 'color', 'background_color', 'description', 'body', 'created_at', 'updated_at'])) {
-                $extendedProps[$key] = $value;
-            }
-        }
+        // Additional event payload is opt-in to avoid leaking internal model attributes.
+        $extendedProps = $this->getCalendarEventExtendedProps($item);
 
         $eventActionsPayload = $this->buildCalendarEventActionsPayload($item);
 
@@ -272,6 +267,20 @@ abstract class FullCalendarResource extends ModelResource
         $event['extendedProps'] = $extendedProps;
 
         return $event;
+    }
+
+    /**
+     * Override to expose extra event metadata to the browser.
+     *
+     * Default is intentionally empty so packages do not leak model attributes.
+     *
+     * @return array<string, mixed>
+     */
+    protected function getCalendarEventExtendedProps(Model $item): array
+    {
+        unset($item);
+
+        return [];
     }
 
     /**
@@ -666,11 +675,9 @@ abstract class FullCalendarResource extends ModelResource
 
         try {
             $item = $this->resolveCalendarEventForDateUpdate($resourceItem);
+            $this->authorizeCalendarEventDateUpdate($item);
 
             [$start, $end] = $this->normalizeCalendarEventDateUpdatePayload($payload);
-
-            $oldStart = $item->getAttribute($this->startColumn);
-            $oldEnd = $item->getAttribute($this->endColumn);
 
             $this->applyCalendarEventDateUpdate($item, $start, $end, $payload, $request);
 
@@ -720,6 +727,15 @@ abstract class FullCalendarResource extends ModelResource
         $this->setItem($item);
 
         return $item;
+    }
+
+    protected function authorizeCalendarEventDateUpdate(Model $item): void
+    {
+        unset($item);
+
+        if (! $this->editable || ! $this->hasAction(Action::UPDATE) || ! $this->can(Ability::UPDATE)) {
+            abort(Response::HTTP_FORBIDDEN, 'Forbidden');
+        }
     }
 
     /**

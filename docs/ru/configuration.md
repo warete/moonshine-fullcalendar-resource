@@ -59,11 +59,18 @@ protected string $endColumn = 'ends_at';
 - Display timezone по умолчанию берётся из `config('app.timezone')`.
 - Фронтенд нормализует legacy-параметр `timezone` в `timeZone`.
 - Данные drag/drop и resize нормализуются обратно в настроенную таймзону перед сохранением.
+- Обновление дат принимается только если ресурс editable и текущему пользователю доступно действие `UPDATE`.
+
+## Политика extendedProps
+
+- По умолчанию `extendedProps` пустой, кроме `moonshineFullCalendar.actions`.
+- Переопределите `getCalendarEventExtendedProps(Model $item): array`, чтобы явно отдать allowlist дополнительных значений.
 
 ## Переопределяемые хуки
 
 - `fetchEvents(?string $start, ?string $end, array $params): iterable`
 - `formatEvent(Model $item): array`
+- `getCalendarEventExtendedProps(Model $item): array`
 - `getCustomCalendarEventActions(Model $item): iterable`
 - `applyCalendarEventDateUpdate(Model $item, string $start, ?string $end, array $payload, ?CrudRequestContract $request = null): void`
 
