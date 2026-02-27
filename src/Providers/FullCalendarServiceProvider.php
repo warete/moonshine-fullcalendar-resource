@@ -12,9 +12,7 @@ final class FullCalendarServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        $this->app->singleton(FullCalendarPageComponent::class, function ($app) {
-            return new FullCalendarPageComponent($app->make(CoreContract::class));
-        });
+        $this->app->singleton(FullCalendarPageComponent::class, fn($app): FullCalendarPageComponent => new FullCalendarPageComponent($app->make(CoreContract::class)));
     }
 
     public function boot(): void

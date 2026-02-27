@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Warete\MoonShineFullCalendar\Http\Controllers;
 
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
+use Throwable;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 use MoonShine\Contracts\Core\DependencyInjection\CrudRequestContract;
@@ -53,7 +55,7 @@ final class FullCalendarEventsController
             ])->setStatusCode(Response::HTTP_UNPROCESSABLE_ENTITY);
 
             return $resource->modifyErrorResponse($response, $e);
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $e) {
+        } catch (HttpExceptionInterface $e) {
 
             $response = JsonResponse::make([
                 'message' => $e->getMessage() !== '' ? $e->getMessage() : __('moonshine::ui.saved_error'),
@@ -61,7 +63,7 @@ final class FullCalendarEventsController
             ])->setStatusCode($e->getStatusCode());
 
             return $resource->modifyErrorResponse($response, $e);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
 
             $response = JsonResponse::make([
                 'message' => __('moonshine::ui.saved_error'),

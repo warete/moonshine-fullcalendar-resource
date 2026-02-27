@@ -40,8 +40,6 @@ class FullCalendarIndexPage extends IndexPage
 
     /**
      * Get the resource for this page
-     *
-     * @return FullCalendarResource|null
      */
     public function getResource(): ?FullCalendarResource
     {
