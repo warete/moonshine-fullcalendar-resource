@@ -176,7 +176,7 @@
 
 .ms-full-calendar .full-calendar.fc .fc-view-harness .fc-event {
     padding: 0.125rem 0.375rem;
-    font-size: 0.875rem;
+    font-size: 0.7rem;
     font-weight: 500;
     border-radius: var(--msfc-radius-sm);
 }
