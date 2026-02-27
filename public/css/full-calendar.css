@@ -1,0 +1,433 @@
+/*
+ * MoonShine FullCalendar theme
+ *
+ * Based on .stuff/reference.css, adapted to MoonShine runtime tokens and
+ * kept as plain CSS because this package emits the stylesheet as-is.
+ */
+
+.ms-full-calendar .full-calendar {
+    min-height: 600px;
+}
+
+.ms-full-calendar .full-calendar.fc {
+    font-family: inherit;
+    color: var(--color-base-text, var(--color-base-content, #111827));
+
+    --msfc-surface: var(--color-base, var(--color-base-100, #ffffff));
+    --msfc-surface-soft: color-mix(
+        in oklab,
+        var(--color-base-100, var(--color-base, #ffffff)) 72%,
+        transparent
+    );
+    --msfc-surface-muted: color-mix(
+        in oklab,
+        var(--color-base-200, var(--color-base-100, #f3f4f6)) 58%,
+        transparent
+    );
+    --msfc-text: var(--color-base-text, var(--color-base-content, #111827));
+    --msfc-text-muted: color-mix(in oklab, var(--msfc-text) 78%, transparent);
+    --msfc-text-soft: color-mix(in oklab, var(--msfc-text) 56%, transparent);
+    --msfc-border: color-mix(in oklab, var(--msfc-text) 20%, transparent);
+    --msfc-border-strong: color-mix(in oklab, var(--msfc-text) 30%, transparent);
+    --msfc-primary-soft: color-mix(in oklab, var(--color-primary, #2563eb) 16%, transparent);
+    --msfc-primary-soft-hover: color-mix(in oklab, var(--color-primary, #2563eb) 24%, transparent);
+    --msfc-secondary-soft: color-mix(in oklab, var(--color-secondary, #7c3aed) 16%, transparent);
+    --msfc-radius-sm: var(--radius-sm, 0.375rem);
+    --msfc-radius-md: var(--radius-md, 0.5rem);
+    --msfc-radius-lg: var(--radius-lg, 0.75rem);
+    --msfc-shadow-lg: var(
+        --shadow-md,
+        0 12px 28px color-mix(in oklab, var(--msfc-text) 12%, transparent)
+    );
+
+    --fc-page-bg-color: var(--color-base-100, var(--msfc-surface));
+    --fc-neutral-bg-color: color-mix(
+        in oklab,
+        var(--color-neutral, var(--msfc-text)) 30%,
+        transparent
+    );
+    --fc-neutral-text-color: var(--color-neutral-content, var(--msfc-text-muted));
+    --fc-border-color: var(--msfc-border);
+
+    --fc-button-text-color: var(--color-primary, #2563eb);
+    --fc-button-bg-color: var(--msfc-primary-soft);
+    --fc-button-border-color: var(--msfc-primary-soft);
+    --fc-button-hover-bg-color: var(--msfc-primary-soft-hover);
+    --fc-button-hover-border-color: var(--msfc-primary-soft-hover);
+    --fc-button-active-bg-color: var(--msfc-primary-soft-hover);
+    --fc-button-active-border-color: var(--msfc-primary-soft-hover);
+
+    --fc-event-bg-color: color-mix(in oklab, var(--color-primary, #2563eb) 75%, transparent);
+    --fc-event-border-color: var(--color-primary, #2563eb);
+    --fc-event-text-color: color-mix(
+        in oklab,
+        var(--color-primary, #2563eb) 58%,
+        var(--msfc-text)
+    );
+    --fc-event-selected-overlay-color: var(--msfc-secondary-soft);
+    --fc-list-event-dot-width: 8px;
+    --fc-list-event-hover-bg-color: color-mix(
+        in oklab,
+        var(--color-secondary, #7c3aed) 16%,
+        transparent
+    );
+
+    --fc-more-link-bg-color: color-mix(
+        in oklab,
+        var(--color-secondary, #7c3aed) 16%,
+        transparent
+    );
+    --fc-more-link-text-color: var(--color-secondary, #7c3aed);
+
+    --fc-event-resizer-thickness: 8px;
+    --fc-event-resizer-dot-total-width: 8px;
+    --fc-event-resizer-dot-border-width: 1px;
+
+    --fc-non-business-color: color-mix(in oklab, var(--color-info, #0ea5e9) 16%, transparent);
+    --fc-bg-event-color: var(--color-neutral, var(--msfc-text));
+    --fc-bg-event-opacity: 0.3;
+    --fc-highlight-color: var(--msfc-secondary-soft);
+    --fc-today-bg-color: color-mix(
+        in oklab,
+        var(--color-base-300, var(--color-base-200, #e5e7eb)) 35%,
+        transparent
+    );
+    --fc-now-indicator-color: var(--color-warning, #f59e0b);
+}
+
+.ms-full-calendar .full-calendar.fc a {
+    color: inherit;
+}
+
+.ms-full-calendar .full-calendar.fc .fc-button-primary:not(:disabled).fc-button-active:focus,
+.ms-full-calendar .full-calendar.fc .fc-button-primary:not(:disabled):active:focus,
+.ms-full-calendar .full-calendar.fc .fc-button-primary:focus,
+.ms-full-calendar .full-calendar.fc .fc-button:focus {
+    box-shadow: none;
+}
+
+.ms-full-calendar .full-calendar.fc .fc-button-primary,
+.ms-full-calendar .full-calendar.fc .fc-button-primary:not(:disabled).fc-button-active,
+.ms-full-calendar .full-calendar.fc .fc-button-primary:hover,
+.ms-full-calendar .full-calendar.fc .fc-button-primary:not(:disabled):active,
+.ms-full-calendar .full-calendar.fc .fc-button-primary:disabled {
+    border-color: transparent;
+}
+
+.ms-full-calendar .full-calendar.fc .fc-button {
+    border-radius: var(--msfc-radius-md);
+    box-shadow: none;
+    font-size: var(--ms-btn-font-size, 0.875rem);
+    font-weight: 500;
+}
+
+.ms-full-calendar .full-calendar.fc .fc-toolbar {
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.ms-full-calendar .full-calendar.fc .fc-toolbar .fc-button:not(.fc-next-button):not(.fc-prev-button) {
+    padding: 0.375rem 0.875rem;
+}
+
+.ms-full-calendar .full-calendar.fc .fc-toolbar .fc-toolbar-chunk {
+    display: flex;
+    align-items: center;
+}
+
+.ms-full-calendar .full-calendar.fc .fc-toolbar h2,
+.ms-full-calendar .full-calendar.fc .fc-toolbar-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--msfc-text);
+}
+
+.ms-full-calendar .full-calendar.fc .fc-toolbar .fc-prev-button,
+.ms-full-calendar .full-calendar.fc .fc-toolbar .fc-next-button {
+    color: var(--msfc-text-muted);
+    background: transparent;
+    border-color: transparent;
+    padding: 0 0.5rem;
+}
+
+.ms-full-calendar .full-calendar.fc .fc-toolbar .fc-prev-button:hover,
+.ms-full-calendar .full-calendar.fc .fc-toolbar .fc-next-button:hover {
+    color: var(--msfc-text);
+    background: transparent;
+}
+
+.ms-full-calendar .full-calendar.fc .fc-toolbar .fc-prev-button .fc-icon,
+.ms-full-calendar .full-calendar.fc .fc-toolbar .fc-next-button .fc-icon {
+    display: inline-block;
+    margin-top: -0.125rem;
+    transition: transform 120ms ease;
+}
+
+.ms-full-calendar .full-calendar.fc .fc-toolbar .fc-prev-button:hover .fc-icon,
+.ms-full-calendar .full-calendar.fc .fc-toolbar .fc-next-button:hover .fc-icon {
+    transform: scale(1.1);
+}
+
+.ms-full-calendar .full-calendar.fc .fc-theme-standard .fc-scrollgrid,
+.ms-full-calendar .full-calendar.fc .fc-theme-standard td,
+.ms-full-calendar .full-calendar.fc .fc-theme-standard th {
+    border-color: var(--fc-border-color);
+}
+
+.ms-full-calendar .full-calendar.fc .fc-view-harness .fc-event {
+    padding: 0.125rem 0.375rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border-radius: var(--msfc-radius-sm);
+}
+
+.ms-full-calendar .full-calendar.fc .fc-view-harness .fc-event .fc-daygrid-event-dot {
+    display: none;
+}
+
+.ms-full-calendar .full-calendar.fc .fc-view-harness .fc-event .fc-event-title {
+    font-weight: 500;
+}
+
+.ms-full-calendar .full-calendar.fc .fc-daygrid-event .fc-event-time {
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.ms-full-calendar .full-calendar.fc .fc-event-primary {
+    --fc-event-text-color: color-mix(in oklab, var(--color-primary, #2563eb) 60%, var(--msfc-text));
+    --fc-event-border-color: var(--color-primary, #2563eb);
+    background: color-mix(in oklab, var(--color-primary, #2563eb) 75%, transparent);
+    color: var(--fc-event-text-color);
+}
+
+.ms-full-calendar .full-calendar.fc .fc-event-secondary {
+    --fc-event-text-color: color-mix(in oklab, var(--color-secondary, #7c3aed) 60%, var(--msfc-text));
+    --fc-event-border-color: var(--color-secondary, #7c3aed);
+    background: color-mix(in oklab, var(--color-secondary, #7c3aed) 75%, transparent);
+    color: var(--fc-event-text-color);
+}
+
+.ms-full-calendar .full-calendar.fc .fc-event-error {
+    --fc-event-text-color: color-mix(in oklab, var(--color-error, #dc2626) 62%, var(--msfc-text));
+    --fc-event-border-color: var(--color-error, #dc2626);
+    background: color-mix(in oklab, var(--color-error, #dc2626) 75%, transparent);
+    color: var(--fc-event-text-color);
+}
+
+.ms-full-calendar .full-calendar.fc .fc-event-warning {
+    --fc-event-text-color: color-mix(in oklab, var(--color-warning, #f59e0b) 42%, var(--msfc-text));
+    --fc-event-border-color: var(--color-warning, #f59e0b);
+    background: color-mix(in oklab, var(--color-warning, #f59e0b) 75%, transparent);
+    color: var(--fc-event-text-color);
+}
+
+.ms-full-calendar .full-calendar.fc .fc-event-success {
+    --fc-event-text-color: color-mix(in oklab, var(--color-success, #16a34a) 58%, var(--msfc-text));
+    --fc-event-border-color: var(--color-success, #16a34a);
+    background: color-mix(in oklab, var(--color-success, #16a34a) 75%, transparent);
+    color: var(--fc-event-text-color);
+}
+
+.ms-full-calendar .full-calendar.fc .fc-event-info {
+    --fc-event-text-color: color-mix(in oklab, var(--color-info, #0ea5e9) 54%, var(--msfc-text));
+    --fc-event-border-color: var(--color-info, #0ea5e9);
+    background: color-mix(in oklab, var(--color-info, #0ea5e9) 75%, transparent);
+    color: var(--fc-event-text-color);
+}
+
+.ms-full-calendar .full-calendar.fc .fc-daygrid-event-harness + .fc-daygrid-event-harness .fc-daygrid-event {
+    margin-top: 0.375rem;
+}
+
+.ms-full-calendar .full-calendar.fc .fc-h-event,
+.ms-full-calendar .full-calendar.fc .fc-v-event {
+    border-width: 1px;
+}
+
+.ms-full-calendar .full-calendar.fc .fc-daygrid-day-bottom {
+    color: var(--msfc-text-soft);
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.ms-full-calendar .full-calendar.fc .fc-daygrid-more-link {
+    margin-top: 3px;
+}
+
+.ms-full-calendar .full-calendar.fc .fc-popover {
+    border: 1px solid var(--msfc-border);
+    border-radius: var(--msfc-radius-lg);
+    background: var(--msfc-surface);
+    box-shadow: var(--msfc-shadow-lg);
+    overflow: hidden;
+}
+
+.ms-full-calendar .full-calendar.fc .fc-popover .fc-popover-header {
+    padding: 0.5rem;
+    border-bottom: 1px solid var(--msfc-border);
+    border-top-left-radius: var(--msfc-radius-lg);
+    border-top-right-radius: var(--msfc-radius-lg);
+    background: var(--msfc-surface-soft);
+}
+
+.ms-full-calendar .full-calendar.fc .fc-more-popover .fc-popover-body {
+    min-width: 11rem;
+}
+
+.ms-full-calendar .full-calendar.fc .fc-daygrid-dot-event {
+    margin-top: 0.375rem;
+}
+
+.ms-full-calendar .full-calendar.fc .fc-daygrid-block-event .fc-event-title {
+    padding: 0;
+}
+
+.ms-full-calendar .full-calendar.fc th {
+    color: var(--msfc-text-muted);
+    font-weight: 500;
+}
+
+.ms-full-calendar .full-calendar.fc .fc-view-harness .fc-daygrid-body .fc-daygrid-day .fc-daygrid-day-top {
+    display: flex;
+    flex-direction: row;
+}
+
+.ms-full-calendar .full-calendar.fc .fc-scroller {
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+.ms-full-calendar .full-calendar.fc .fc-timegrid-divider {
+    display: none;
+}
+
+.ms-full-calendar .full-calendar.fc .fc-daygrid-body-natural .fc-daygrid-day-events {
+    margin-top: 0.5rem !important;
+    margin-bottom: 0.3rem !important;
+}
+
+.ms-full-calendar .full-calendar.fc .fc-timegrid-col-events {
+    margin: 1px !important;
+}
+
+.ms-full-calendar .full-calendar.fc .fc-timegrid-slot-label,
+.ms-full-calendar .full-calendar.fc .fc-timegrid-slot-lane {
+    border-left-color: transparent !important;
+    border-right-color: transparent !important;
+}
+
+.ms-full-calendar .full-calendar.fc .fc-list-day-cushion,
+.ms-full-calendar .full-calendar.fc .fc-cell-shaded,
+.ms-full-calendar .full-calendar.fc .fc-day-disabled {
+    background: var(--msfc-surface-soft) !important;
+    font-size: 0.875rem;
+}
+
+.ms-full-calendar .full-calendar.fc .fc-list-table .fc-event-primary,
+.ms-full-calendar .full-calendar.fc .fc-list-table .fc-event-secondary,
+.ms-full-calendar .full-calendar.fc .fc-list-table .fc-event-error,
+.ms-full-calendar .full-calendar.fc .fc-list-table .fc-event-warning,
+.ms-full-calendar .full-calendar.fc .fc-list-table .fc-event-success,
+.ms-full-calendar .full-calendar.fc .fc-list-table .fc-event-info {
+    --fc-event-bg-color: var(--msfc-surface);
+    background: var(--msfc-surface) !important;
+}
+
+.fc-direction-rtl .ms-full-calendar .full-calendar.fc .fc-toolbar-ltr,
+.ms-full-calendar .full-calendar.fc-direction-rtl .fc-toolbar-ltr {
+    flex-direction: row !important;
+}
+
+.ms-full-calendar .full-calendar.fc .fc-event.msfc-event-custom-tonal {
+    background: color-mix(
+        in oklab,
+        var(--msfc-event-accent, var(--color-primary, #2563eb)) 75%,
+        transparent
+    ) !important;
+    border-color: var(--msfc-event-accent, var(--color-primary, #2563eb)) !important;
+    color: var(--msfc-event-custom-text, color-mix(
+        in oklab,
+        var(--msfc-event-accent, var(--color-primary, #2563eb)) 20%,
+        var(--msfc-text)
+    )) !important;
+}
+
+.ms-full-calendar .full-calendar.fc .fc-event.msfc-event-custom-tonal .fc-event-main {
+    color: inherit;
+}
+
+.ms-full-calendar .full-calendar-loading {
+    background: color-mix(in oklab, var(--msfc-surface, #ffffff) 78%, transparent);
+    backdrop-filter: blur(3px);
+}
+
+.ms-full-calendar .full-calendar-loading__spinner {
+    border-color: color-mix(in oklab, var(--color-primary, #2563eb) 18%, transparent);
+    border-bottom-color: var(--color-primary, #2563eb);
+}
+
+.ms-full-calendar .full-calendar-loading__text {
+    color: var(--color-base-text, var(--color-base-content, #111827));
+}
+
+.ms-full-calendar .full-calendar-error__card {
+    border: 1px solid color-mix(in oklab, var(--color-error, #dc2626) 20%, transparent);
+    border-radius: var(--radius-lg, 0.75rem);
+    background: color-mix(in oklab, var(--msfc-surface, #ffffff) 92%, transparent);
+    color: var(--color-base-text, var(--color-base-content, #111827));
+    box-shadow: var(--msfc-shadow-lg);
+}
+
+.ms-full-calendar .full-calendar-error__icon {
+    color: color-mix(in oklab, var(--color-error, #dc2626) 78%, transparent);
+}
+
+.ms-full-calendar .full-calendar-error__title {
+    color: var(--color-base-text, var(--color-base-content, #111827));
+}
+
+.ms-full-calendar .full-calendar-error__message {
+    color: color-mix(
+        in oklab,
+        var(--color-error, #dc2626) 42%,
+        var(--color-base-text, var(--color-base-content, #111827))
+    );
+}
+
+.ms-full-calendar .full-calendar-event-actions-dropdown {
+    z-index: var(--z-dropdown, 150);
+    width: max-content;
+    max-width: min(300px, calc(100vw - 1rem));
+    pointer-events: auto;
+}
+
+.ms-full-calendar .full-calendar-event-actions-dropdown__content {
+    display: inline-flex;
+    flex-wrap: wrap;
+    width: max-content;
+    max-width: min(300px, calc(100vw - 1rem));
+    gap: 0.375rem;
+    padding: 0.5rem;
+    border: 1px solid var(--color-base-stroke, var(--msfc-border, rgba(0, 0, 0, 0.12)));
+    border-radius: var(--radius-lg, 0.75rem);
+    background: var(--color-base, #ffffff);
+    color: var(--color-base-text, var(--color-base-content, #111827));
+    box-shadow: var(--msfc-shadow-lg);
+    overflow: hidden;
+    isolation: isolate;
+}
+
+.ms-full-calendar .full-calendar-event-actions-dropdown__content :is(.btn, button, a) {
+    flex-shrink: 0;
+    max-width: 100%;
+    border-radius: var(--radius-md, 0.5rem);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ms-full-calendar .full-calendar.fc .fc-button,
+    .ms-full-calendar .full-calendar.fc .fc-toolbar .fc-prev-button .fc-icon,
+    .ms-full-calendar .full-calendar.fc .fc-toolbar .fc-next-button .fc-icon {
+        transition: none;
+    }
+}

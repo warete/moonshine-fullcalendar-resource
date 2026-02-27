@@ -6,15 +6,14 @@ namespace Warete\MoonShineFullCalendar\Providers;
 
 use Illuminate\Support\ServiceProvider;
 use MoonShine\Contracts\Core\DependencyInjection\CoreContract;
-use Warete\MoonShineFullCalendar\Components\FullCalendarComponent;
+use Warete\MoonShineFullCalendar\Components\FullCalendarPageComponent;
 
 final class FullCalendarServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        // Register FullCalendarComponent as a singleton
-        $this->app->singleton(FullCalendarComponent::class, function ($app) {
-            return new FullCalendarComponent($app->make(CoreContract::class));
+        $this->app->singleton(FullCalendarPageComponent::class, function ($app) {
+            return new FullCalendarPageComponent($app->make(CoreContract::class));
         });
     }
 
@@ -38,29 +37,5 @@ final class FullCalendarServiceProvider extends ServiceProvider
         $this->publishes([
             __DIR__ . '/../../lang' => $this->app->langPath('vendor/moonshine-fullcalendar'),
         ], 'moonshine-fullcalendar-lang');
-
-        // Register commands (if we add any later)
-        $this->commands([
-            // Add command classes here when needed
-        ]);
-
-        // Register Blade directive for easy component rendering (optional)
-        $this->registerBladeDirectives();
-    }
-
-    /**
-     * Register custom Blade directives
-     */
-    protected function registerBladeDirectives(): void
-    {
-        // Directive: @fullcalendar($resource)
-        // Usage in Blade: @fullcalendar($resource)
-        if (!method_exists(\Blade::class, 'directive')) {
-            return;
-        }
-
-        \Blade::directive('fullcalendar', function ($expression) {
-            return "<?php echo \\Warete\\MoonShineFullCalendar\\Components\\FullCalendarComponent::class; ?>";
-        });
     }
 }

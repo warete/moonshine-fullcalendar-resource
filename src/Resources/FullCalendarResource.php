@@ -6,18 +6,17 @@ namespace Warete\MoonShineFullCalendar\Resources;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Log;
-use MoonShine\Contracts\Core\DependencyInjection\CrudRequestContract;
 use MoonShine\Contracts\Core\DependencyInjection\CoreContract;
+use MoonShine\Contracts\Core\DependencyInjection\CrudRequestContract;
 use MoonShine\Contracts\Core\DependencyInjection\FieldsContract;
 use MoonShine\Contracts\UI\ActionButtonContract;
 use MoonShine\Contracts\UI\FieldContract;
+use MoonShine\Contracts\UI\ModalContract;
 use MoonShine\Crud\Buttons\DeleteButton;
 use MoonShine\Crud\Buttons\EditButton;
 use MoonShine\Crud\JsonResponse;
 use MoonShine\Laravel\Resources\ModelResource;
 use MoonShine\Laravel\TypeCasts\ModelDataWrapper;
-use MoonShine\Contracts\UI\ModalContract;
 use MoonShine\Support\AlpineJs;
 use MoonShine\Support\Enums\Ability;
 use MoonShine\Support\Enums\Action;
@@ -50,10 +49,10 @@ abstract class FullCalendarResource extends ModelResource
     /**
      * FullCalendar view modes
      */
-    final const VIEW_MONTH = 'dayGridMonth';
-    final const VIEW_WEEK = 'timeGridWeek';
-    final const VIEW_DAY = 'timeGridDay';
-    final const VIEW_LIST = 'listWeek';
+    final public const VIEW_MONTH = 'dayGridMonth';
+    final public const VIEW_WEEK = 'timeGridWeek';
+    final public const VIEW_DAY = 'timeGridDay';
+    final public const VIEW_LIST = 'listWeek';
 
     /**
      * Default calendar view
@@ -95,11 +94,6 @@ abstract class FullCalendarResource extends ModelResource
     protected ?string $timezone = null;
 
     /**
-     * Logging level
-     */
-    protected string $logLevel = 'info';
-
-    /**
      * Date column name for start datetime (override in your resource)
      */
     protected string $startColumn = 'start';
@@ -125,15 +119,7 @@ abstract class FullCalendarResource extends ModelResource
 
     public function __construct(CoreContract $core)
     {
-        $this->logLevel = config('fullcalendar.log_level', env('FULLCALENDAR_LOG_LEVEL', 'info'));
         $this->timezone = $this->timezone ?? config('app.timezone');
-
-        $this->log('info', 'Resource instantiated', [
-            'class' => static::class,
-            'model' => $this->model ?? 'not set',
-            'defaultView' => $this->defaultView,
-            'timeZone' => $this->timezone,
-        ]);
 
         parent::__construct($core);
     }
@@ -147,58 +133,17 @@ abstract class FullCalendarResource extends ModelResource
      */
     public function getCalendarItems(array $params = []): array
     {
-        $this->log('info', 'Getting calendar items', [
-            'model' => $this->model,
-            'params' => $params,
-        ]);
+        $start = $params['start'] ?? null;
+        $end = $params['end'] ?? null;
+        $items = $this->fetchEvents($start, $end, $params);
 
-        try {
-            $start = $params['start'] ?? null;
-            $end = $params['end'] ?? null;
-
-            $this->log('debug', 'Date range parsed', [
-                'start' => $start,
-                'end' => $end,
-                'startColumn' => $this->startColumn,
-                'endColumn' => $this->endColumn,
-            ]);
-
-            $items = $this->fetchEvents($start, $end, $params);
-
-            $this->log('info', 'Events fetched', [
-                'count' => count($items),
-            ]);
-
-            $formatted = [];
-            foreach ($items as $item) {
-                $formattedEvent = $this->formatEvent($item);
-                $formatted[] = $this->ensureCalendarEventActionsPayload($formattedEvent, $item);
-            }
-
-            $eventsWithActions = 0;
-            foreach ($formatted as $event) {
-                $actions = $event['extendedProps'][$this->calendarEventPayloadKey]['actions'] ?? null;
-                if (is_array($actions) && (($actions['hasActions'] ?? false) === true)) {
-                    $eventsWithActions++;
-                }
-            }
-
-            $this->log('info', 'Events formatted with actions payload', [
-                'formatted_count' => count($formatted),
-                'events_with_actions' => $eventsWithActions,
-                'resource' => $this->getUriKey(),
-            ]);
-
-            return $formatted;
-        } catch (\Throwable $e) {
-            $this->log('error', 'Error fetching calendar items', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-                'params' => $params,
-            ]);
-
-            throw $e;
+        $formatted = [];
+        foreach ($items as $item) {
+            $formattedEvent = $this->formatEvent($item);
+            $formatted[] = $this->ensureCalendarEventActionsPayload($formattedEvent, $item);
         }
+
+        return $formatted;
     }
 
     /**
@@ -212,9 +157,6 @@ abstract class FullCalendarResource extends ModelResource
      */
     protected function fetchEvents(?string $start, ?string $end, array $params): iterable
     {
-        $this->log('debug', 'Building Eloquent query', [
-            'model' => $this->model,
-        ]);
 
         $query = $this->getQuery();
 
@@ -236,13 +178,6 @@ abstract class FullCalendarResource extends ModelResource
                 });
             });
 
-            $this->log('info', '[FIX][query-range] Date range filter applied', [
-                'rawStart' => $start,
-                'rawEnd' => $end,
-                'normalizedStart' => $normalizedStart,
-                'normalizedEnd' => $normalizedEnd,
-                'timezone' => $this->timezone,
-            ]);
         }
 
         // Apply any additional filters from params
@@ -250,10 +185,6 @@ abstract class FullCalendarResource extends ModelResource
             foreach ($params['filters'] as $column => $value) {
                 if ($value !== null && $value !== '') {
                     $query->where($column, $value);
-                    $this->log('debug', 'Filter applied', [
-                        'column' => $column,
-                        'value' => $value,
-                    ]);
                 }
             }
         }
@@ -262,11 +193,6 @@ abstract class FullCalendarResource extends ModelResource
         $query->orderBy($this->startColumn, 'asc');
 
         $items = $query->get();
-
-        $this->log('debug', 'Query executed', [
-            'count' => $items->count(),
-            'sql' => $query->toSql(),
-        ]);
 
         return $items;
     }
@@ -284,19 +210,8 @@ abstract class FullCalendarResource extends ModelResource
             $timezone = $this->timezone ?: config('app.timezone');
             $normalized = Carbon::parse($value)->setTimezone($timezone)->format('Y-m-d H:i:s');
 
-            $this->log('debug', '[FIX][query-range] Query datetime normalized', [
-                'input' => $value,
-                'timezone' => $timezone,
-                'output' => $normalized,
-            ]);
-
             return $normalized;
-        } catch (\Throwable $e) {
-            $this->log('warning', '[FIX][query-range] Failed to normalize query datetime, using raw value', [
-                'input' => $value,
-                'timezone' => $this->timezone,
-                'error' => $e->getMessage(),
-            ]);
+        } catch (\Throwable) {
 
             return $value;
         }
@@ -311,10 +226,6 @@ abstract class FullCalendarResource extends ModelResource
      */
     protected function formatEvent(Model $item): array
     {
-        $this->log('debug', 'Formatting event', [
-            'model_class' => get_class($item),
-            'model_id' => $item->getKey(),
-        ]);
 
         $event = [
             'id' => $item->getKey(),
@@ -342,7 +253,7 @@ abstract class FullCalendarResource extends ModelResource
         // Add extended props for any additional attributes
         $extendedProps = [];
         foreach ($item->getAttributes() as $key => $value) {
-            if (!in_array($key, [$item->getKeyName(), $this->getColumn(), $this->startColumn, $this->endColumn, 'color', 'background_color', 'description', 'body', 'created_at', 'updated_at'])) {
+            if (! in_array($key, [$item->getKeyName(), $this->getColumn(), $this->startColumn, $this->endColumn, 'color', 'background_color', 'description', 'body', 'created_at', 'updated_at'])) {
                 $extendedProps[$key] = $value;
             }
         }
@@ -354,13 +265,6 @@ abstract class FullCalendarResource extends ModelResource
         ];
 
         $event['extendedProps'] = $extendedProps;
-
-        $this->log('debug', 'Event formatted', [
-            'event_id' => $event['id'],
-            'event_title' => $event['title'],
-            'actions_count' => $eventActionsPayload['count'],
-            'actions_has' => $eventActionsPayload['hasActions'],
-        ]);
 
         return $event;
     }
@@ -377,12 +281,6 @@ abstract class FullCalendarResource extends ModelResource
         $existingActions = $event['extendedProps'][$this->calendarEventPayloadKey]['actions'] ?? null;
 
         if (is_array($existingActions)) {
-            $this->log('info', '[FIX][event-actions] Existing actions payload preserved', [
-                'item_id' => $item->getKey(),
-                'resource' => $this->getUriKey(),
-                'has_actions' => (bool) ($existingActions['hasActions'] ?? false),
-                'count' => (int) ($existingActions['count'] ?? 0),
-            ]);
 
             return $event;
         }
@@ -390,12 +288,7 @@ abstract class FullCalendarResource extends ModelResource
         $payload = $this->buildCalendarEventActionsPayload($item);
 
         $extendedProps = $event['extendedProps'] ?? [];
-        if (!is_array($extendedProps)) {
-            $this->log('warning', '[FIX][event-actions] Invalid extendedProps type, resetting to array', [
-                'item_id' => $item->getKey(),
-                'resource' => $this->getUriKey(),
-                'type' => get_debug_type($extendedProps),
-            ]);
+        if (! is_array($extendedProps)) {
             $extendedProps = [];
         }
 
@@ -404,13 +297,6 @@ abstract class FullCalendarResource extends ModelResource
         ];
 
         $event['extendedProps'] = $extendedProps;
-
-        $this->log('info', '[FIX][event-actions] Actions payload injected after formatEvent', [
-            'item_id' => $item->getKey(),
-            'resource' => $this->getUriKey(),
-            'has_actions' => $payload['hasActions'],
-            'count' => $payload['count'],
-        ]);
 
         return $event;
     }
@@ -434,12 +320,7 @@ abstract class FullCalendarResource extends ModelResource
                 $parsed = Carbon::parse($value, $timezone);
 
                 return $parsed->format('c');
-            } catch (\Throwable $e) {
-                $this->log('warning', '[FIX][formatDateTime] Failed to normalize date string, returning raw value', [
-                    'value' => $value,
-                    'timezone' => $this->timezone,
-                    'error' => $e->getMessage(),
-                ]);
+            } catch (\Throwable) {
 
                 return $value;
             }
@@ -498,21 +379,8 @@ abstract class FullCalendarResource extends ModelResource
                 'hasActions' => count($renderedButtons) > 0,
             ];
 
-            $this->log('info', 'Calendar event actions payload built', [
-                'item_id' => $item->getKey(),
-                'resource' => $this->getUriKey(),
-                'actions_count' => $payload['count'],
-                'has_actions' => $payload['hasActions'],
-            ]);
-
             return $payload;
-        } catch (\Throwable $e) {
-            $this->log('error', 'Failed to build calendar event actions payload', [
-                'item_id' => $item->getKey(),
-                'resource' => $this->getUriKey(),
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
+        } catch (\Throwable) {
 
             return [
                 'version' => 1,
@@ -531,13 +399,6 @@ abstract class FullCalendarResource extends ModelResource
         $defaultActions = $this->getDefaultCalendarEventActions($item);
         $customActions = $this->normalizeCustomCalendarEventActions($this->getCustomCalendarEventActions($item), $item);
         $actions = [...$defaultActions, ...$customActions];
-
-        $this->log('info', 'Calendar event actions composed', [
-            'item_id' => $item->getKey(),
-            'default_count' => count($defaultActions),
-            'custom_count' => count($customActions),
-            'total_count' => count($actions),
-        ]);
 
         return $actions;
     }
@@ -566,11 +427,7 @@ abstract class FullCalendarResource extends ModelResource
 
         try {
             $this->setItem($item);
-        } catch (\Throwable $e) {
-            $this->log('warning', 'Failed to set resource item before building actions', [
-                'item_id' => $item->getKey(),
-                'error' => $e->getMessage(),
-            ]);
+        } catch (\Throwable) {
         }
 
         $actions = [];
@@ -579,21 +436,8 @@ abstract class FullCalendarResource extends ModelResource
             $editButton = EditButton::for($this, isAsync: true)
                 ->setData($wrapped);
 
-            $this->log('info', 'Default edit action composed', [
-                'item_id' => $item->getKey(),
-                'resource' => $this->getUriKey(),
-                'editInModal' => $this->isEditInModal(),
-                'isAsync' => method_exists($editButton, 'isAsync') ? $editButton->isAsync() : null,
-            ]);
-
             $actions[] = $this->ensureCalendarActionIsAsync($editButton, $item, 'edit');
-        } catch (\Throwable $e) {
-            $this->log('warning', 'Default edit action unavailable', [
-                'item_id' => $item->getKey(),
-                'resource' => $this->getUriKey(),
-                'editInModal' => $this->isEditInModal(),
-                'error' => $e->getMessage(),
-            ]);
+        } catch (\Throwable) {
         }
 
         try {
@@ -601,12 +445,7 @@ abstract class FullCalendarResource extends ModelResource
                 ->setData($wrapped);
 
             $actions[] = $this->ensureCalendarActionIsAsync($deleteButton, $item, 'delete');
-        } catch (\Throwable $e) {
-            $this->log('warning', 'Default delete action unavailable', [
-                'item_id' => $item->getKey(),
-                'resource' => $this->getUriKey(),
-                'error' => $e->getMessage(),
-            ]);
+        } catch (\Throwable) {
         }
 
         return array_values(array_filter($actions, static fn ($action): bool => $action instanceof ActionButtonContract));
@@ -633,27 +472,20 @@ abstract class FullCalendarResource extends ModelResource
             if ($action instanceof ActionButtonContract) {
                 try {
                     $action->setData(new ModelDataWrapper($item));
-                } catch (\Throwable $e) {
-                    $this->log('warning', 'Failed to bind item context to custom action', [
-                        'item_id' => $item->getKey(),
-                        'action_class' => $action::class,
-                        'error' => $e->getMessage(),
-                    ]);
+                } catch (\Throwable) {
                 }
 
                 $list[] = $this->ensureCalendarActionIsAsync($action, $item, 'custom');
+
                 continue;
             }
 
             if (is_string($action)) {
                 $list[] = $action;
+
                 continue;
             }
 
-            $this->log('warning', 'Unsupported custom calendar action type', [
-                'item_id' => $item->getKey(),
-                'type' => get_debug_type($action),
-            ]);
         }
 
         return $list;
@@ -668,11 +500,6 @@ abstract class FullCalendarResource extends ModelResource
         // Buttons with embedded modal/offcanvas components (Edit/Delete defaults) can still
         // execute async inside the modal flow; avoid clobbering their behavior.
         if (method_exists($action, 'hasComponent') && $action->hasComponent()) {
-            $this->log('info', 'Calendar action kept as modal/offcanvas flow', [
-                'item_id' => $item->getKey(),
-                'source' => $source,
-                'action_class' => $action::class,
-            ]);
 
             return $action;
         }
@@ -680,11 +507,6 @@ abstract class FullCalendarResource extends ModelResource
         if (method_exists($action, 'async')) {
             $action->async(HttpMethod::GET);
 
-            $this->log('info', 'Calendar action normalized to async', [
-                'item_id' => $item->getKey(),
-                'source' => $source,
-                'action_class' => $action::class,
-            ]);
         }
 
         return $action;
@@ -706,11 +528,7 @@ abstract class FullCalendarResource extends ModelResource
                 continue;
             }
 
-            if (!($action instanceof ActionButtonContract)) {
-                $this->log('warning', 'Unsupported calendar action while rendering', [
-                    'item_id' => $item->getKey(),
-                    'type' => get_debug_type($action),
-                ]);
+            if (! ($action instanceof ActionButtonContract)) {
 
                 continue;
             }
@@ -723,12 +541,7 @@ abstract class FullCalendarResource extends ModelResource
                 }
 
                 $rendered[] = $html;
-            } catch (\Throwable $e) {
-                $this->log('warning', 'Failed to render calendar action button', [
-                    'item_id' => $item->getKey(),
-                    'action_class' => $action::class,
-                    'error' => $e->getMessage(),
-                ]);
+            } catch (\Throwable) {
             }
         }
 
@@ -740,19 +553,11 @@ abstract class FullCalendarResource extends ModelResource
      */
     public function getEventsEndpoint(): string
     {
-        $this->log('debug', 'Building events endpoint', [
-            'resource_uri_key' => $this->getUriKey(),
-        ]);
 
         // Build the endpoint URL manually for resource-scoped routes
         // The route is: /admin/resource/{resourceUri}/full-calendar/events
         $resourceUri = $this->getUriKey();
         $endpoint = moonshineRouter()->to('full-calendar.events.list', ['resourceUri' => $this->getUriKey()]);
-
-        $this->log('debug', 'Events endpoint built', [
-            'endpoint' => $endpoint,
-            'resourceUri' => $resourceUri,
-        ]);
 
         return $endpoint;
     }
@@ -762,12 +567,6 @@ abstract class FullCalendarResource extends ModelResource
         $template = moonshineRouter()->to('full-calendar.events.dates.update', [
             'resourceUri' => $this->getUriKey(),
             'resourceItem' => $this->calendarEventDateUpdateIdPlaceholder,
-        ]);
-
-        $this->log('debug', 'Event dates update endpoint template built', [
-            'resourceUri' => $this->getUriKey(),
-            'template' => $template,
-            'placeholder' => $this->calendarEventDateUpdateIdPlaceholder,
         ]);
 
         return $template;
@@ -796,10 +595,6 @@ abstract class FullCalendarResource extends ModelResource
             ],
             'createFromGrid' => $this->getCalendarCreateConfig(),
         ], $this->calendarOptions);
-
-        $this->log('debug', 'Calendar config generated', [
-            'config' => $config,
-        ]);
 
         return $config;
     }
@@ -842,16 +637,6 @@ abstract class FullCalendarResource extends ModelResource
             'allDayFallbackDurationDays' => 1,
         ];
 
-        $this->log($enabled ? 'info' : 'warning', 'Calendar create-from-grid config generated', [
-            'resource' => $this->getUriKey(),
-            'enabled' => $enabled,
-            'reason' => $reason,
-            'modalName' => $config['modalName'],
-            'startParam' => $config['startParam'],
-            'endParam' => $config['endParam'],
-            'openOnDoubleClick' => $config['openOnDoubleClick'],
-        ]);
-
         return $config;
     }
 
@@ -887,11 +672,6 @@ abstract class FullCalendarResource extends ModelResource
             }
         );
 
-        $this->log('info', '[FIX][create-from-grid] Create form fields prefilled from request', [
-            'resource' => $this->getUriKey(),
-            'prefilledColumns' => array_keys($prefill),
-        ]);
-
         return $fields;
     }
 
@@ -905,11 +685,6 @@ abstract class FullCalendarResource extends ModelResource
      */
     public function updateCalendarEventDates(string $resourceItem, array $payload, ?CrudRequestContract $request = null): Response
     {
-        $this->log('info', 'Calendar event date update requested', [
-            'resource' => $this->getUriKey(),
-            'resourceItem' => $resourceItem,
-            'payload' => $payload,
-        ]);
 
         try {
             $item = $this->resolveCalendarEventForDateUpdate($resourceItem);
@@ -925,29 +700,10 @@ abstract class FullCalendarResource extends ModelResource
                 ->toast(__('moonshine::ui.saved'), ToastType::SUCCESS)
                 ->setStatusCode(Response::HTTP_OK);
 
-            $this->appendCalendarRefreshEvent($response, 'updateCalendarEventDates');
-
-            $this->log('info', 'Calendar event dates updated successfully', [
-                'resource' => $this->getUriKey(),
-                'resourceItem' => $resourceItem,
-                'startColumn' => $this->startColumn,
-                'endColumn' => $this->endColumn,
-                'oldStart' => $oldStart instanceof \DateTimeInterface ? $oldStart->format('c') : $oldStart,
-                'oldEnd' => $oldEnd instanceof \DateTimeInterface ? $oldEnd->format('c') : $oldEnd,
-                'newStart' => $start,
-                'newEnd' => $end,
-                'action' => $payload['action'] ?? null,
-            ]);
+            $this->appendCalendarRefreshEvent($response);
 
             return $response;
         } catch (\Throwable $e) {
-            $this->log('error', 'Calendar event date update failed', [
-                'resource' => $this->getUriKey(),
-                'resourceItem' => $resourceItem,
-                'payload' => $payload,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
 
             $response = JsonResponse::make()
                 ->toast(
@@ -985,12 +741,6 @@ abstract class FullCalendarResource extends ModelResource
 
         $this->setItem($item);
 
-        $this->log('debug', '[FIX][date-update] Event resolved via findItem', [
-            'resource' => $this->getUriKey(),
-            'resourceItem' => $resourceItem,
-            'resolved_id' => $item->getKey(),
-        ]);
-
         return $item;
     }
 
@@ -1006,21 +756,9 @@ abstract class FullCalendarResource extends ModelResource
             : null;
 
         if ($end !== null && $end < $start) {
-            $this->log('warning', 'Calendar event date update payload end precedes start', [
-                'start' => $start,
-                'end' => $end,
-                'payload' => $payload,
-            ]);
 
             abort(Response::HTTP_UNPROCESSABLE_ENTITY, 'Event end date must be after start date');
         }
-
-        $this->log('debug', 'Calendar event date update payload normalized', [
-            'start' => $start,
-            'end' => $end,
-            'timezone' => $payload['timezone'] ?? $this->timezone,
-            'action' => $payload['action'] ?? null,
-        ]);
 
         return [$start, $end];
     }
@@ -1061,16 +799,6 @@ abstract class FullCalendarResource extends ModelResource
 
         $this->setItem($saved->getOriginal());
 
-        $this->log('info', '[FIX][date-update] Calendar event date update persisted via MoonShine resource save pipeline', [
-            'resource' => $this->getUriKey(),
-            'item_id' => $item->getKey(),
-            'startColumn' => $this->startColumn,
-            'endColumn' => $this->endColumn,
-            'start' => $start,
-            'end' => $end,
-            'action' => $payload['action'] ?? null,
-            'request_has_resource' => $request?->getResource() !== null,
-        ]);
     }
 
     /**
@@ -1164,30 +892,6 @@ abstract class FullCalendarResource extends ModelResource
     }
 
     /**
-     * Log a message with level check
-     */
-    protected function log(string $level, string $message, array $context = []): void
-    {
-        $levels = ['debug', 'info', 'warning', 'error'];
-        $currentLevel = strtolower($this->logLevel);
-
-        $levelIndex = array_search(strtolower($level), $levels);
-        $currentLevelIndex = array_search($currentLevel, $levels);
-
-        if ($levelIndex === false || $currentLevelIndex === false || $levelIndex < $currentLevelIndex) {
-            return;
-        }
-
-        $logMessage = sprintf(
-            '[FullCalendarResource.%s] %s',
-            class_basename(static::class),
-            $message
-        );
-
-        Log::log($level, $logMessage, $context);
-    }
-
-    /**
      * Modify save response to dispatch calendar refresh event
      * This is called by MoonShine after successful create/update operations
      *
@@ -1196,17 +900,9 @@ abstract class FullCalendarResource extends ModelResource
      */
     public function modifySaveResponse(\MoonShine\Crud\JsonResponse $response): \MoonShine\Crud\JsonResponse
     {
-        $this->log('info', '[modifySaveResponse] Adding calendar refresh event', [
-            'resource' => $this->getUriKey(),
-        ]);
-
         try {
-            $this->appendCalendarRefreshEvent($response, 'modifySaveResponse');
-        } catch (\Throwable $e) {
-            $this->log('error', '[modifySaveResponse] Failed to add refresh event', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
+            $this->appendCalendarRefreshEvent($response);
+        } catch (\Throwable) {
         }
 
         return $response;
@@ -1217,32 +913,19 @@ abstract class FullCalendarResource extends ModelResource
      */
     public function modifyDestroyResponse(\MoonShine\Crud\JsonResponse $response): \MoonShine\Crud\JsonResponse
     {
-        $this->log('info', '[modifyDestroyResponse] Adding calendar refresh event', [
-            'resource' => $this->getUriKey(),
-        ]);
-
         try {
-            $this->appendCalendarRefreshEvent($response, 'modifyDestroyResponse');
-        } catch (\Throwable $e) {
-            $this->log('error', '[modifyDestroyResponse] Failed to add refresh event', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
+            $this->appendCalendarRefreshEvent($response);
+        } catch (\Throwable) {
         }
 
         return $response;
     }
 
-    protected function appendCalendarRefreshEvent(\MoonShine\Crud\JsonResponse $response, string $source): void
+    protected function appendCalendarRefreshEvent(\MoonShine\Crud\JsonResponse $response): void
     {
         $resourceUri = $this->getUriKey();
 
         $refreshEvent = AlpineJs::event('fullcalendar:refresh', null, [
-            'resource' => $resourceUri,
-        ]);
-
-        $this->log('info', "[$source] Calendar refresh event added", [
-            'event' => $refreshEvent,
             'resource' => $resourceUri,
         ]);
 

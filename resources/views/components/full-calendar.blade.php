@@ -11,8 +11,7 @@
         config: @js($calendarConfig),
         endpoint: '{{ $endpoint }}',
         resourceUri: '{{ $resource?->getUriKey() ?? '' }}',
-        async: {{ $async ? 'true' : 'false' }},
-        debug: {{ config('fullcalendar.debug', env('FULLCALENDAR_DEBUG', false)) ? 'true' : 'false' }}
+        async: {{ $async ? 'true' : 'false' }}
     })"
     x-init="initCalendar"
     class="full-calendar-container ms-full-calendar relative"

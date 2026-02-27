@@ -21,6 +21,16 @@ export default defineConfig({
     build: {
         emptyOutDir: false,
         manifest: true,
+        esbuild: {
+            drop: ['console'],
+            pure: [
+                'console.log',
+                'console.info',
+                'console.warn',
+                'console.error',
+                'console.debug',
+            ],
+        },
         rollupOptions: {
             input: ['resources/js/register.js'],
             output: {

@@ -31,23 +31,13 @@ const FULLCALENDAR_LOCALES = {
  */
 function getFullCalendarLocale(localeCode = 'en') {
     const normalizedCode = localeCode.toLowerCase().split('-')[0]; // Handle 'ru-RU' -> 'ru'
-    console.log('[FullCalendar] getFullCalendarLocale', {
-        requested: localeCode,
-        normalized: normalizedCode,
-        available: Object.keys(FULLCALENDAR_LOCALES)
-    });
 
     // Check if locale exists in registry
     if (FULLCALENDAR_LOCALES.hasOwnProperty(normalizedCode)) {
-        console.log('[FullCalendar] Locale found in registry', { locale: normalizedCode });
         return FULLCALENDAR_LOCALES[normalizedCode];
     }
 
     // Default to English if locale not found
-    console.warn('[FullCalendar] Locale not found, defaulting to English', {
-        requested: localeCode,
-        normalized: normalizedCode
-    });
     return FULLCALENDAR_LOCALES.en;
 }
 
@@ -94,7 +84,6 @@ function parseMoonShineEventString(eventsValue) {
  */
 export function registerFullCalendar() {
     if (typeof Alpine === 'undefined') {
-        console.error('[FullCalendar] Alpine.js is not loaded');
         return;
     }
 
@@ -135,24 +124,16 @@ export function registerFullCalendar() {
         endpoint: props.endpoint || '',
         resourceUri: props.resourceUri || null,
         async: props.async !== undefined ? props.async : false,
-        debug: props.debug || false,
         currentLocale: props.config?.locale || 'en',
 
         /**
          * Initialize FullCalendar
          */
         initCalendar() {
-            this.log('debug', 'Initializing FullCalendar', {
-                endpoint: this.endpoint,
-                async: this.async,
-                config: this.config,
-                locale: this.currentLocale
-            });
 
             const calendarEl = this.$el.querySelector('.full-calendar');
 
             if (!calendarEl) {
-                this.log('error', 'Calendar element not found');
                 this.error = 'Calendar container not found';
                 return;
             }
@@ -160,27 +141,11 @@ export function registerFullCalendar() {
             // Get locale object from registry
             const localeObj = getFullCalendarLocale(this.currentLocale);
 
-            this.log('debug', 'Locale configuration', {
-                localeCode: this.currentLocale,
-                localeObject: localeObj,
-                availableLocales: getAvailableLocaleCodes()
-            });
-
-            // [FIX] Log timezone configuration for debugging
             const timeZone = this.config.timeZone || this.config.timezone || 'local';
-            this.log('debug', '[FIX] Timezone configuration', {
-                configTimeZone: this.config.timeZone,
-                configTimezone: this.config.timezone,
-                finalTimeZone: timeZone,
-                'local': Intl.DateTimeFormat().resolvedOptions().timeZone
-            });
 
             // Normalize incoming config from PHP (legacy `timezone` -> FullCalendar `timeZone`)
             const normalizedConfig = { ...this.config };
             if (Object.prototype.hasOwnProperty.call(normalizedConfig, 'timezone')) {
-                this.log('info', '[FIX] Removing unsupported FullCalendar option `timezone`', {
-                    timezone: normalizedConfig.timezone
-                });
                 delete normalizedConfig.timezone;
             }
 
@@ -202,7 +167,7 @@ export function registerFullCalendar() {
                 // [FIX] Support both timeZone and timezone (PHP convention) - use 'local' if not set
                 // If timezone is set, use it as IANA timezone (e.g., 'Europe/Moscow', 'UTC')
                 // FullCalendar will parse event times and display in this timezone
-                timeZone: normalizedConfig.timeZone || this.config.timezone || 'local',
+                timeZone: timeZone,
 
                 // Event handlers
                 events: this.fetchEvents.bind(this),
@@ -215,7 +180,6 @@ export function registerFullCalendar() {
                 // Lifecycle hooks
                 loading: (isLoading) => {
                     this.loading = isLoading;
-                    this.log('debug', 'Calendar loading state', { isLoading });
                 },
 
                 eventDidMount: (info) => {
@@ -227,13 +191,8 @@ export function registerFullCalendar() {
                 },
 
                 // View change handler
-                datesSet: (info) => {
+                datesSet: () => {
                     this.closeEventActionsDropdown('datesSet');
-                    this.log('debug', 'View changed', {
-                        view: info.view.type,
-                        start: info.start.toISOString(),
-                        end: info.end.toISOString()
-                    });
                 }
             };
 
@@ -242,22 +201,12 @@ export function registerFullCalendar() {
                 this.calendar = new Calendar(calendarEl, calendarConfig);
                 this.calendar.render();
 
-                this.log('info', 'FullCalendar initialized successfully', {
-                    view: this.calendar.view.type,
-                    locale: this.currentLocale
-                });
-
                 this.setupDropdownDismissListeners();
                 this.setupDropdownRepositionListeners();
-                this.logDropdownHostStatus();
                 // Setup event listener for calendar refresh after CRUD operations
                 this.setupRefreshListener();
                 this.applyInitialLayoutFix('init');
             } catch (error) {
-                this.log('error', 'Failed to initialize FullCalendar', {
-                    error: error.message,
-                    stack: error.stack
-                });
                 this.error = error.message;
             }
         },
@@ -296,11 +245,9 @@ export function registerFullCalendar() {
             this.closeEventActionsDropdown(`refresh-teardown:${reason}`);
 
             if (this.refreshListenerAbortController) {
-                this.log('info', '[FIX][refresh] Tearing down refresh listeners via AbortController', { reason });
                 this.refreshListenerAbortController.abort();
                 this.refreshListenerAbortController = null;
             } else if (this.refreshListenerHandler) {
-                this.log('info', '[FIX][refresh] Tearing down refresh listeners (fallback removeEventListener)', { reason });
                 window.removeEventListener('fullcalendar:refresh', this.refreshListenerHandler);
                 document.removeEventListener('fullcalendar:refresh', this.refreshListenerHandler);
             }
@@ -334,16 +281,12 @@ export function registerFullCalendar() {
                 document.addEventListener('keydown', this.dropdownDismissKeyHandler);
             }
 
-            this.log('info', '[FIX][actions-dropdown] Dismiss listeners registered', {
-                targets: ['document:pointerdown', 'document:click', 'document:keydown']
-            });
         },
 
         teardownDropdownDismissListeners(reason = 'unknown') {
             if (this.dropdownDismissAbortController) {
                 this.dropdownDismissAbortController.abort();
                 this.dropdownDismissAbortController = null;
-                this.log('info', '[FIX][actions-dropdown] Dismiss listeners removed', { reason });
                 return;
             }
 
@@ -356,7 +299,6 @@ export function registerFullCalendar() {
                 document.removeEventListener('keydown', this.dropdownDismissKeyHandler);
             }
 
-            this.log('info', '[FIX][actions-dropdown] Dismiss listeners removed (fallback)', { reason });
         },
 
         setupDropdownRepositionListeners() {
@@ -378,16 +320,12 @@ export function registerFullCalendar() {
                 window.addEventListener('resize', this.dropdownRepositionResizeHandler);
             }
 
-            this.log('info', '[FIX][actions-dropdown] Reposition listeners registered', {
-                targets: ['document:scroll(capture)', 'window:resize']
-            });
         },
 
         teardownDropdownRepositionListeners(reason = 'unknown') {
             if (this.dropdownRepositionAbortController) {
                 this.dropdownRepositionAbortController.abort();
                 this.dropdownRepositionAbortController = null;
-                this.log('info', '[FIX][actions-dropdown] Reposition listeners removed', { reason });
                 return;
             }
 
@@ -399,7 +337,6 @@ export function registerFullCalendar() {
                 window.removeEventListener('resize', this.dropdownRepositionResizeHandler);
             }
 
-            this.log('info', '[FIX][actions-dropdown] Reposition listeners removed (fallback)', { reason });
         },
 
         handleDropdownRepositionEvent(event) {
@@ -411,12 +348,6 @@ export function registerFullCalendar() {
             const anchorEl = this.dropdownAnchorEl;
 
             if (!dropdownEl || !anchorEl || !anchorEl.isConnected) {
-                this.log('warn', '[FIX][actions-dropdown] Closing on reposition because anchor is unavailable', {
-                    eventType: event?.type || 'unknown',
-                    dropdownFound: !!dropdownEl,
-                    anchorFound: !!anchorEl,
-                    anchorConnected: !!anchorEl?.isConnected
-                });
                 this.closeEventActionsDropdown(`reposition-missing:${event?.type || 'unknown'}`);
                 return;
             }
@@ -457,12 +388,6 @@ export function registerFullCalendar() {
                 return;
             }
 
-            this.log('info', '[FIX][actions-dropdown] Action click detected, scheduling close', {
-                eventId: this.dropdownEventId,
-                tagName: actionTarget.tagName,
-                className: actionTarget.className || null
-            });
-
             // Close after MoonShine/Alpine handlers receive the click event.
             setTimeout(() => {
                 this.closeEventActionsDropdown('action-click');
@@ -472,7 +397,6 @@ export function registerFullCalendar() {
         dedupeTeleportedModalTemplates() {
             const templates = Array.from(document.querySelectorAll('.modal-template[data-teleport-target="true"]'));
             const groups = new Map();
-            let removedCount = 0;
 
             for (const template of templates) {
                 const keyAttr = template
@@ -490,7 +414,7 @@ export function registerFullCalendar() {
                 groups.get(keyAttr).push(template);
             }
 
-            for (const [keyAttr, group] of groups.entries()) {
+            for (const [, group] of groups.entries()) {
                 if (group.length <= 1) {
                     continue;
                 }
@@ -499,36 +423,12 @@ export function registerFullCalendar() {
                 const toRemove = group.slice(0, -1);
                 toRemove.forEach((node) => {
                     node.remove();
-                    removedCount++;
-                });
-
-                this.log('warn', '[FIX][actions-dropdown] Removed duplicate teleported modal templates', {
-                    modalEventKey: keyAttr,
-                    duplicatesRemoved: toRemove.length,
-                    kept: 1
                 });
             }
-
-            if (removedCount === 0) {
-                this.log('debug', '[FIX][actions-dropdown] No duplicate teleported modal templates found');
-            }
-        },
-
-        logDropdownHostStatus() {
-            this.log('info', '[actions-dropdown] Dropdown host mounted', {
-                hostFound: !!this.$refs?.eventActionsDropdown,
-                contentFound: !!this.$refs?.eventActionsDropdownContent
-            });
         },
 
         getEventActionsPayload(event) {
             const payload = event?.extendedProps?.moonshineFullCalendar?.actions ?? null;
-
-            this.log('info', '[actions-dropdown] Event payload inspected', {
-                eventId: event?.id ?? null,
-                payloadKeys: payload ? Object.keys(payload) : [],
-                extendedPropsKeys: event?.extendedProps ? Object.keys(event.extendedProps) : []
-            });
 
             return payload;
         },
@@ -554,7 +454,6 @@ export function registerFullCalendar() {
 
             this.dropdownPlacement = 'bottom';
 
-            this.log('info', '[FIX][actions-dropdown] Closed', { reason });
         },
 
         positionEventActionsDropdown(anchorEl, dropdownEl = null) {
@@ -603,42 +502,12 @@ export function registerFullCalendar() {
 
             this.updateDropdownStyle();
 
-            this.log('info', '[FIX][actions-dropdown] Positioned', {
-                x: this.dropdownX,
-                y: this.dropdownY,
-                placement: this.dropdownPlacement,
-                viewportWidth,
-                viewportHeight,
-                measuredWidth,
-                measuredHeight,
-                anchorClickXViewport,
-                clickOffsetX: this.dropdownAnchorClickOffsetX,
-                rootRect: {
-                    left: rootRect.left,
-                    top: rootRect.top,
-                    width: rootRect.width,
-                    height: rootRect.height
-                },
-                anchorRect: {
-                    left: anchorRect.left,
-                    top: anchorRect.top,
-                    right: anchorRect.right,
-                    bottom: anchorRect.bottom,
-                    width: anchorRect.width,
-                    height: anchorRect.height
-                }
-            });
-
             return true;
         },
 
-        initializeEventActionsDropdownContent(eventId, actionsCount) {
+        initializeEventActionsDropdownContent() {
             const contentEl = this.$refs?.eventActionsDropdownContent;
             if (!contentEl) {
-                this.log('warn', '[actions-dropdown] Dropdown content node not found', {
-                    eventId,
-                    actionsCount
-                });
                 return;
             }
 
@@ -652,26 +521,10 @@ export function registerFullCalendar() {
 
                     this.dedupeTeleportedModalTemplates();
 
-                    this.log('info', '[FIX][actions-dropdown] HTML injected and Alpine child subtrees initialized', {
-                        eventId,
-                        actionsCount,
-                        initMethod: 'Alpine.initTree(children)',
-                        childRootsCount: childRoots.length
-                    });
                     return;
                 }
 
-                this.log('warn', '[FIX][actions-dropdown] Alpine.initTree unavailable for injected actions HTML', {
-                    eventId,
-                    actionsCount
-                });
             } catch (error) {
-                this.log('error', '[FIX][actions-dropdown] Failed to initialize injected actions HTML', {
-                    eventId,
-                    actionsCount,
-                    error: error.message,
-                    stack: error.stack
-                });
             }
         },
 
@@ -680,11 +533,6 @@ export function registerFullCalendar() {
             const contentEl = this.$refs?.eventActionsDropdownContent;
 
             if (!hostEl || !contentEl) {
-                this.log('warn', '[actions-dropdown] Dropdown host/content refs missing', {
-                    eventId,
-                    hostFound: !!hostEl,
-                    contentFound: !!contentEl
-                });
                 return false;
             }
 
@@ -704,18 +552,11 @@ export function registerFullCalendar() {
                 );
             }
 
-            if (!this.positionEventActionsDropdown(anchorEl)) {
-                this.log('warn', '[actions-dropdown] Failed to position dropdown', { eventId });
-            }
+            this.positionEventActionsDropdown(anchorEl);
 
             this.$nextTick(() => {
-                this.initializeEventActionsDropdownContent(eventId, actionsCount);
+                this.initializeEventActionsDropdownContent();
                 this.positionEventActionsDropdown(anchorEl, this.$refs?.eventActionsDropdown);
-            });
-
-            this.log('info', '[FIX][actions-dropdown] Opened', {
-                eventId,
-                actionsCount
             });
 
             return true;
@@ -756,32 +597,13 @@ export function registerFullCalendar() {
 
                 const viewType = this.calendar.view?.type;
                 if (viewType !== 'timeGridDay') {
-                    this.log('debug', '[FIX][layout] Skip layout fix for non-timeGridDay view', {
-                        reason,
-                        phase,
-                        viewType
-                    });
                     return;
                 }
-
-                const layoutLogLevel = phase === 'raf-1' ? 'info' : 'debug';
-                this.log(layoutLogLevel, '[FIX][layout] Applying timeGridDay layout refresh', {
-                    reason,
-                    phase,
-                    viewType,
-                    eventCount: this.calendar.getEvents().length
-                });
 
                 try {
                     this.calendar.updateSize();
                     this.calendar.render();
                 } catch (error) {
-                    this.log('error', '[FIX][layout] Failed to apply layout refresh', {
-                        reason,
-                        phase,
-                        error: error.message,
-                        stack: error.stack
-                    });
                 }
 
                 this.ensureTimeGridDayEventsRendered(`[layout:${reason}:${phase}]`);
@@ -812,15 +634,6 @@ export function registerFullCalendar() {
 
             const parsedEvents = this.calendar.getEvents();
             const timeGridEvents = this.$el?.querySelectorAll?.('.fc-timegrid-event')?.length ?? 0;
-            const allDayEvents = this.$el?.querySelectorAll?.('.fc-daygrid-event, .fc-timegrid-allday .fc-event')?.length ?? 0;
-
-            this.log('info', '[FIX][day-view] Render probe', {
-                reason,
-                parsedCount: parsedEvents.length,
-                timeGridDomCount: timeGridEvents,
-                allDayDomCount: allDayEvents,
-                recoveryAttempted: this.dayViewRenderRecoveryAttempted
-            });
 
             if (parsedEvents.length === 0 || timeGridEvents > 0 || this.dayViewRenderRecoveryAttempted) {
                 return;
@@ -829,36 +642,13 @@ export function registerFullCalendar() {
             this.dayViewRenderRecoveryAttempted = true;
 
             const currentDate = this.calendar.getDate();
-            const parsedSample = parsedEvents.slice(0, 3).map((event) => ({
-                id: event.id,
-                title: event.title,
-                start: event.start ? event.start.toISOString() : null,
-                end: event.end ? event.end.toISOString() : null,
-                allDay: event.allDay
-            }));
-
-            this.log('warn', '[FIX][day-view] Parsed events exist but no timeGrid DOM events rendered; forcing view reapply', {
-                reason,
-                currentDate: currentDate?.toISOString?.() || null,
-                parsedSample
-            });
-
             try {
                 this.calendar.changeView('timeGridDay', currentDate);
 
                 requestAnimationFrame(() => {
                     this.calendar?.updateSize?.();
-                    this.log('info', '[FIX][day-view] View reapply complete', {
-                        reason,
-                        timeGridDomCountAfter: this.$el?.querySelectorAll?.('.fc-timegrid-event')?.length ?? 0
-                    });
                 });
             } catch (error) {
-                this.log('error', '[FIX][day-view] View reapply failed', {
-                    reason,
-                    error: error.message,
-                    stack: error.stack
-                });
             }
         },
 
@@ -875,29 +665,14 @@ export function registerFullCalendar() {
             // Extract resource URI from endpoint URL for filtering
             const resourceUri = this.resourceUri || this.getResourceUriFromEndpoint();
 
-            this.log('info', '[refresh] Setting up calendar refresh listener', {
-                resourceUri: resourceUri,
-                endpoint: this.endpoint,
-                resourceUriSource: this.resourceUri ? 'props.resourceUri' : 'endpoint'
-            });
-
             const handleRefreshEvent = (event) => {
-                self.log('info', '[refresh] Refresh event received', {
-                    eventType: event.type,
-                    detail: event.detail
-                });
 
                 // If no resource is provided, treat as broadcast refresh for all calendars
                 if (!event.detail || !event.detail.resource) {
-                    self.log('info', '[FIX][refresh] Broadcast refresh event received', {
-                        detail: event.detail || null
-                    });
 
                     if (self.calendar) {
                         self.closeEventActionsDropdown('refresh-broadcast');
                         self.calendar.refetchEvents();
-                    } else {
-                        self.log('warn', '[FIX][refresh] Cannot refresh on broadcast: calendar not initialized');
                     }
 
                     return;
@@ -908,17 +683,7 @@ export function registerFullCalendar() {
                     const eventResource = String(event.detail.resource).trim();
                     const normalizedCalendarResource = resourceUri ? String(resourceUri).trim() : null;
 
-                    self.log('info', '[refresh] Checking resource match', {
-                        eventResource: eventResource,
-                        calendarResource: normalizedCalendarResource,
-                        matches: eventResource === normalizedCalendarResource
-                    });
-
                     if (!normalizedCalendarResource) {
-                        self.log('warn', '[FIX][refresh] Calendar resource URI is unknown, applying fallback refresh', {
-                            eventResource: eventResource,
-                            endpoint: self.endpoint
-                        });
 
                         if (self.calendar) {
                             self.closeEventActionsDropdown('refresh-fallback');
@@ -930,29 +695,12 @@ export function registerFullCalendar() {
 
                     // Only refresh if this event is for this calendar
                     if (eventResource === normalizedCalendarResource) {
-                        self.log('info', '[refresh] Resource match detected, refreshing calendar');
 
                         // Call refetchEvents
                         if (self.calendar) {
                             self.closeEventActionsDropdown('refresh-resource-match');
-                            const beforeCount = self.calendar.getEvents().length;
-                            self.log('info', '[refresh] Before refetch', { eventCount: beforeCount });
-
                             self.calendar.refetchEvents();
-
-                            // Log after refetch (async, so use timeout)
-                            setTimeout(() => {
-                                const afterCount = self.calendar.getEvents().length;
-                                self.log('info', '[refresh] After refetch', { eventCount: afterCount });
-                            }, 500);
-                        } else {
-                            self.log('warn', '[refresh] Cannot refresh: calendar not initialized');
                         }
-                    } else {
-                        self.log('debug', '[FIX][refresh] Skipping refresh - resource mismatch', {
-                            event: eventResource,
-                            current: normalizedCalendarResource
-                        });
                     }
                 }
             };
@@ -974,9 +722,6 @@ export function registerFullCalendar() {
 
             this.setupRefreshListenerAutoCleanup();
 
-            this.log('info', '[FIX][refresh] Calendar refresh listener registered', {
-                targets: ['window', 'document']
-            });
         },
 
         /**
@@ -994,10 +739,6 @@ export function registerFullCalendar() {
                 }
                 return null;
             } catch (error) {
-                this.log('warn', '[refresh] Failed to extract resource URI from endpoint', {
-                    endpoint: this.endpoint,
-                    error: error.message
-                });
                 return null;
             }
         },
@@ -1021,14 +762,6 @@ export function registerFullCalendar() {
 
             const encodedId = encodeURIComponent(String(eventId));
             const url = cfg.urlTemplate.replaceAll(cfg.idPlaceholder, encodedId);
-
-            if (url === cfg.urlTemplate) {
-                this.log('warn', '[event-dates-update] Placeholder was not replaced in URL template', {
-                    urlTemplate: cfg.urlTemplate,
-                    idPlaceholder: cfg.idPlaceholder,
-                    eventId,
-                });
-            }
 
             return url;
         },
@@ -1063,11 +796,6 @@ export function registerFullCalendar() {
 
             const events = parseMoonShineEventString(data.events);
 
-            this.log('debug', '[event-dates-update] Parsed MoonShine response events', {
-                eventsCount: events.length,
-                rawEvents: data.events || null,
-            });
-
             if (events.length === 0 && fallbackResource) {
                 window.dispatchEvent(new CustomEvent('fullcalendar:refresh', {
                     detail: { resource: fallbackResource },
@@ -1089,13 +817,11 @@ export function registerFullCalendar() {
             const eventId = String(info?.event?.id ?? '');
 
             if (!eventId) {
-                this.log('error', '[event-dates-update] Missing event id', { action });
                 info?.revert?.();
                 return;
             }
 
             if (this.pendingDateMutationByEventId[eventId]) {
-                this.log('warn', '[event-dates-update] Duplicate mutation prevented', { eventId, action });
                 info?.revert?.();
                 return;
             }
@@ -1109,10 +835,6 @@ export function registerFullCalendar() {
             };
 
             if (!payload.start) {
-                this.log('error', '[event-dates-update] Missing event start in callback payload', {
-                    eventId,
-                    action,
-                });
                 info.revert();
                 return;
             }
@@ -1124,15 +846,6 @@ export function registerFullCalendar() {
                 url = this.buildEventDateUpdateUrl(eventId);
                 this.pendingDateMutationByEventId[eventId] = true;
 
-                this.log('info', '[event-dates-update] Sending mutation request', {
-                    eventId,
-                    action,
-                    endpoint: url,
-                    method,
-                    payload,
-                    resourceUri: this.resourceUri,
-                });
-
                 const response = await fetch(url, {
                     method,
                     headers: this.buildAjaxHeaders(),
@@ -1143,22 +856,7 @@ export function registerFullCalendar() {
                 try {
                     responseData = await response.json();
                 } catch (parseError) {
-                    this.log('warn', '[event-dates-update] Failed to parse response JSON', {
-                        eventId,
-                        action,
-                        endpoint: url,
-                        error: parseError.message,
-                    });
                 }
-
-                this.log('debug', '[event-dates-update] Mutation response received', {
-                    eventId,
-                    action,
-                    status: response.status,
-                    ok: response.ok,
-                    hasMessage: !!responseData?.message,
-                    hasEvents: !!responseData?.events,
-                });
 
                 if (!response.ok) {
                     throw new Error(responseData?.message || `HTTP ${response.status}: ${response.statusText}`);
@@ -1166,14 +864,6 @@ export function registerFullCalendar() {
 
                 this.applyMoonShineJsonSideEffects(responseData, this.resourceUri);
             } catch (error) {
-                this.log('error', '[event-dates-update] Mutation request failed, reverting event', {
-                    eventId,
-                    action,
-                    endpoint: url,
-                    payload,
-                    error: error.message,
-                    stack: error.stack,
-                });
 
                 info.revert();
                 this.error = error.message;
@@ -1198,21 +888,11 @@ export function registerFullCalendar() {
             const start = info.start ? info.start.toISOString() : null;
             const end = info.end ? info.end.toISOString() : null;
 
-            this.log('debug', 'Fetching events', {
-                endpoint: this.endpoint,
-                start: start,
-                end: end
-            });
-
             try {
                 // Build URL with query parameters
                 const url = new URL(this.endpoint, window.location.origin);
                 if (start) url.searchParams.set('start', start);
                 if (end) url.searchParams.set('end', end);
-
-                this.log('debug', 'Request URL', {
-                    url: url.toString()
-                });
 
                 // Prepare headers with CSRF token for MoonShine
                 const headers = {
@@ -1234,11 +914,6 @@ export function registerFullCalendar() {
                     headers: headers
                 });
 
-                this.log('debug', 'Response received', {
-                    status: response.status,
-                    ok: response.ok
-                });
-
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
@@ -1246,75 +921,18 @@ export function registerFullCalendar() {
                 const data = await response.json();
                 const events = Array.isArray(data) ? data : [];
 
-                this.log('debug', 'Events fetched successfully', {
-                    count: events.length,
-                    sample: events.slice(0, 2)
-                });
-
                 this.events = events;
                 successCallback(events);
 
                 if (this.calendar?.view?.type === 'timeGridDay') {
-                    const activeStart = this.calendar.view.activeStart?.toISOString?.() || null;
-                    const activeEnd = this.calendar.view.activeEnd?.toISOString?.() || null;
-                    const parsedSample = this.calendar.getEvents().slice(0, 3).map((event) => ({
-                        id: event.id,
-                        title: event.title,
-                        start: event.start ? event.start.toISOString() : null,
-                        end: event.end ? event.end.toISOString() : null,
-                        allDay: event.allDay,
-                        display: event.display,
-                        overlapCurrentDay: (() => {
-                            try {
-                                const eventStart = event.start ? event.start.getTime() : null;
-                                const eventEnd = event.end ? event.end.getTime() : eventStart;
-                                const rangeStart = activeStart ? new Date(activeStart).getTime() : null;
-                                const rangeEnd = activeEnd ? new Date(activeEnd).getTime() : null;
-
-                                if (eventStart === null || rangeStart === null || rangeEnd === null) {
-                                    return null;
-                                }
-
-                                return eventStart < rangeEnd && (eventEnd ?? eventStart) > rangeStart;
-                            } catch (e) {
-                                return null;
-                            }
-                        })()
-                    }));
-                    const rawSample = events.slice(0, 3).map((event) => ({
-                        id: event.id ?? null,
-                        title: event.title ?? null,
-                        start: event.start ?? null,
-                        end: event.end ?? null,
-                        allDay: event.allDay ?? null,
-                        display: event.display ?? null,
-                    }));
-
-                    this.log('info', '[FIX][day-view] Events loaded in timeGridDay', {
-                        activeStart,
-                        activeEnd,
-                        fetchedCount: events.length,
-                        parsedCount: this.calendar.getEvents().length,
-                        parsedSample,
-                        rawSample,
-                        parsedSampleJson: JSON.stringify(parsedSample),
-                        rawSampleJson: JSON.stringify(rawSample)
-                    });
+                    this.dayViewRenderRecoveryAttempted = false;
                 }
 
                 this.applyInitialLayoutFix('events-loaded');
                 setTimeout(() => this.ensureTimeGridDayEventsRendered('events-loaded-post-check'), 10);
                 setTimeout(() => this.ensureTimeGridDayEventsRendered('events-loaded-post-check-100ms'), 100);
 
-                this.log('info', 'Events loaded successfully', {
-                    count: events.length
-                });
             } catch (error) {
-                this.log('error', 'Failed to fetch events', {
-                    error: error.message,
-                    endpoint: this.endpoint,
-                    stack: error.stack
-                });
 
                 this.error = error.message;
                 if (failureCallback) {
@@ -1334,13 +952,6 @@ export function registerFullCalendar() {
             const actionsHtml = typeof payload?.html === 'string' ? payload.html : '';
             const actionsCount = Number(payload?.count || 0);
 
-            this.log('info', '[FIX][actions-dropdown] Event clicked', {
-                eventId: info.event.id,
-                title: info.event.title,
-                hasActions,
-                actionsCount
-            });
-
             if (hasActions && actionsHtml.trim() !== '') {
                 info.jsEvent?.preventDefault?.();
                 info.jsEvent?.stopPropagation?.();
@@ -1359,13 +970,6 @@ export function registerFullCalendar() {
                 });
 
                 return;
-            }
-
-            if (hasActions && actionsHtml.trim() === '') {
-                this.log('warn', '[actions-dropdown] Actions payload present but HTML missing', {
-                    eventId: info.event.id,
-                    actionsCount
-                });
             }
 
             this.closeEventActionsDropdown('event-click-no-actions');
@@ -1394,10 +998,6 @@ export function registerFullCalendar() {
         getCalendarCreateTrigger() {
             const trigger = this.$refs?.calendarCreateTrigger ?? this.$el.querySelector('[data-calendar-create-trigger="true"]');
 
-            if (!trigger) {
-                this.log('warn', '[create-from-grid] Hidden create trigger not found');
-            }
-
             return trigger;
         },
 
@@ -1405,12 +1005,6 @@ export function registerFullCalendar() {
             const controller = Array.from(document.querySelectorAll('[data-teleport-target="true"][x-data]')).find((el) =>
                 typeof el.innerHTML === 'string' && el.innerHTML.includes(`modal_toggled:${modalName}`)
             );
-
-            if (!controller) {
-                this.log('warn', '[create-from-grid] Modal controller not found', {
-                    modalName
-                });
-            }
 
             return controller || null;
         },
@@ -1423,9 +1017,6 @@ export function registerFullCalendar() {
             }
 
             if (typeof modalData.toggleModal !== 'function') {
-                this.log('warn', '[create-from-grid] Modal toggle handler unavailable for patch', {
-                    modalName
-                });
 
                 return modalData;
             }
@@ -1443,10 +1034,6 @@ export function registerFullCalendar() {
             };
 
             modalData.__calendarDynamicAsyncUrlPatched = true;
-
-            this.log('info', '[FIX][create-from-grid] Modal toggle patched for dynamic asyncUrl', {
-                modalName
-            });
 
             return modalData;
         },
@@ -1486,26 +1073,18 @@ export function registerFullCalendar() {
             const trigger = this.getCalendarCreateTrigger();
 
             if (!config.enabled || !trigger) {
-                this.log('warn', '[create-from-grid] Build skipped', {
-                    enabled: config.enabled,
-                    triggerFound: !!trigger
-                });
 
                 return null;
             }
 
             const startDate = range?.start instanceof Date ? range.start : null;
             if (!startDate) {
-                this.log('warn', '[create-from-grid] Missing start date', {
-                    source: range?.source ?? 'unknown'
-                });
 
                 return null;
             }
 
             const baseHref = trigger.dataset.baseHref || trigger.getAttribute('href') || '';
             if (!baseHref) {
-                this.log('warn', '[create-from-grid] Trigger has no base href');
                 return null;
             }
 
@@ -1525,12 +1104,6 @@ export function registerFullCalendar() {
                 this.lastCreateFromGridSignature === signature
                 && now - this.lastCreateFromGridAt < 500
             ) {
-                this.log('info', '[FIX][create-from-grid] Duplicate create open suppressed', {
-                    source: range?.source ?? 'unknown',
-                    resourceUri: this.resourceUri,
-                    signature,
-                    elapsedMs: now - this.lastCreateFromGridAt
-                });
 
                 return null;
             }
@@ -1542,13 +1115,6 @@ export function registerFullCalendar() {
                 && this.lastCreateFromGridAllDay === allDay
                 && now - this.lastCreateFromGridAt < 500
             ) {
-                this.log('info', '[FIX][create-from-grid] Date click suppressed after select', {
-                    source: range.source,
-                    resourceUri: this.resourceUri,
-                    start: startIso,
-                    elapsedMs: now - this.lastCreateFromGridAt,
-                    previousSource: this.lastCreateFromGridSource
-                });
 
                 return null;
             }
@@ -1561,16 +1127,6 @@ export function registerFullCalendar() {
             } else {
                 url.searchParams.delete(config.endParam);
             }
-
-            this.log('info', '[create-from-grid] Create modal URL prepared', {
-                source: range?.source ?? 'unknown',
-                resourceUri: this.resourceUri,
-                start: startIso,
-                end: endDate instanceof Date && !Number.isNaN(endDate.getTime()) ? endDate.toISOString() : null,
-                allDay,
-                finalUrl: url.toString(),
-                modalName: config.modalName
-            });
 
             this.lastCreateFromGridSignature = signature;
             this.lastCreateFromGridAt = now;
@@ -1607,39 +1163,18 @@ export function registerFullCalendar() {
                         modalData.asyncLoaded = false;
                     }
 
-                    this.log('info', '[FIX][create-from-grid] Modal asyncUrl updated before open', {
-                        source: range?.source ?? 'unknown',
-                        resourceUri: this.resourceUri,
-                        modalName: prepared.config.modalName,
-                        asyncUrl: prepared.url,
-                    });
                 }
 
                 window.setTimeout(() => {
                     try {
                         window.dispatchEvent(new CustomEvent(`modal_toggled:${prepared.config.modalName}`));
 
-                        this.log('info', '[FIX][create-from-grid] Modal toggled after deferred tick', {
-                            source: range?.source ?? 'unknown',
-                            resourceUri: this.resourceUri,
-                            modalName: prepared.config.modalName,
-                        });
                     } catch (error) {
-                        this.log('error', '[FIX][create-from-grid] Deferred modal toggle failed', {
-                            source: range?.source ?? 'unknown',
-                            error: error.message,
-                            stack: error.stack
-                        });
                     }
                 }, 0);
 
                 return true;
             } catch (error) {
-                this.log('error', '[create-from-grid] Failed to open create modal', {
-                    source: range?.source ?? 'unknown',
-                    error: error.message,
-                    stack: error.stack
-                });
 
                 return false;
             }
@@ -1651,19 +1186,7 @@ export function registerFullCalendar() {
         handleDateClick(info) {
             const createConfig = this.getCreateFromGridConfig();
 
-            this.log('debug', 'Date clicked', {
-                date: info.date.toISOString(),
-                allDay: info.allDay,
-                clickCount: info.jsEvent?.detail ?? null,
-                openOnDoubleClick: createConfig.openOnDoubleClick,
-            });
-
             if (createConfig.openOnDoubleClick && (info.jsEvent?.detail ?? 0) < 2) {
-                this.log('info', '[create-from-grid] Single click ignored because double click is required', {
-                    date: info.date.toISOString(),
-                    allDay: info.allDay,
-                    clickCount: info.jsEvent?.detail ?? 0,
-                });
 
                 if (window.moonshineFullCalendarDateClick) {
                     window.moonshineFullCalendarDateClick(info);
@@ -1690,13 +1213,6 @@ export function registerFullCalendar() {
         handleDateSelect(info) {
             const createConfig = this.getCreateFromGridConfig();
 
-            this.log('debug', 'Date range selected', {
-                start: info.start.toISOString(),
-                end: info.end.toISOString(),
-                allDay: info.allDay,
-                openOnDoubleClick: createConfig.openOnDoubleClick,
-            });
-
             if (!createConfig.openOnDoubleClick) {
                 this.openCreateModalFromGrid({
                     start: info.start,
@@ -1705,11 +1221,6 @@ export function registerFullCalendar() {
                     source: 'select'
                 });
             } else {
-                this.log('info', '[create-from-grid] Range select ignored because double click is required', {
-                    start: info.start.toISOString(),
-                    end: info.end.toISOString(),
-                    allDay: info.allDay,
-                });
             }
 
             // Clear selection
@@ -1724,11 +1235,6 @@ export function registerFullCalendar() {
          * Handle event drop (drag and drop)
          */
         handleEventDrop(info) {
-            this.log('debug', 'Event dropped', {
-                eventId: info.event.id,
-                newStart: info.event.start.toISOString(),
-                newEnd: info.event.end ? info.event.end.toISOString() : null
-            });
 
             this.closeEventActionsDropdown('event-drop');
             this.updateEventDatesFromCalendar(info, 'drop');
@@ -1742,11 +1248,6 @@ export function registerFullCalendar() {
          * Handle event resize
          */
         handleEventResize(info) {
-            this.log('debug', 'Event resized', {
-                eventId: info.event.id,
-                newStart: info.event.start.toISOString(),
-                newEnd: info.event.end ? info.event.end.toISOString() : null
-            });
 
             this.closeEventActionsDropdown('event-resize');
             this.updateEventDatesFromCalendar(info, 'resize');
@@ -1760,7 +1261,6 @@ export function registerFullCalendar() {
          * Refresh calendar
          */
         refreshCalendar() {
-            this.log('debug', 'Refreshing calendar');
             this.closeEventActionsDropdown('manual-refresh');
 
             if (this.calendar) {
@@ -1780,13 +1280,8 @@ export function registerFullCalendar() {
          * @param {string} localeCode - New locale code (e.g., 'en', 'ru')
          */
         setLocale(localeCode) {
-            this.log('debug', 'Setting locale', {
-                currentLocale: this.currentLocale,
-                newLocale: localeCode
-            });
 
             if (!this.calendar) {
-                this.log('warn', 'Cannot set locale: calendar not initialized');
                 return;
             }
 
@@ -1799,10 +1294,6 @@ export function registerFullCalendar() {
             // Update current locale tracking
             this.currentLocale = localeCode;
 
-            this.log('info', 'Locale updated successfully', {
-                locale: localeCode,
-                localeObject: localeObj
-            });
         },
 
         /**
@@ -1821,31 +1312,6 @@ export function registerFullCalendar() {
             return getAvailableLocaleCodes();
         },
 
-        /**
-         * Log messages to console if debug mode is enabled
-         */
-        log(level, message, data = {}) {
-            if (!this.debug && level === 'debug') {
-                return;
-            }
-
-            const prefix = `[FullCalendar]`;
-
-            switch (level) {
-                case 'debug':
-                    console.debug(prefix, message, data);
-                    break;
-                case 'info':
-                    console.info(prefix, message, data);
-                    break;
-                case 'warn':
-                    console.warn(prefix, message, data);
-                    break;
-                case 'error':
-                    console.error(prefix, message, data);
-                    break;
-            }
-        }
     });
 
     // Support Blade usage x-data="fullCalendar({...})" when script is loaded via MoonShine asset manager.
@@ -1857,7 +1323,6 @@ export function registerFullCalendar() {
  * Initialize on Alpine ready
  */
 document.addEventListener('alpine:init', () => {
-    console.log('[FullCalendar] Alpine ready, registering component');
     registerFullCalendar();
 });
 
@@ -1865,24 +1330,13 @@ document.addEventListener('alpine:init', () => {
  * Also initialize if Alpine is already loaded
  */
 if (window.Alpine && window.Alpine.version) {
-    console.log('[FullCalendar] Alpine already loaded, registering component immediately');
     registerFullCalendar();
 }
-
-/**
- * Log that the script has loaded
- */
-console.log('[FullCalendar] Script loaded, waiting for alpine:init');
 
 /**
  * Export for external use
  */
 window.fullCalendarRefresh = function(resource = null) {
-    console.info('[FIX] fullCalendarRefresh dispatch', {
-        event: 'fullcalendar:refresh',
-        resource: resource
-    });
-
     window.dispatchEvent(new CustomEvent('fullcalendar:refresh', {
         detail: resource ? { resource } : {}
     }));

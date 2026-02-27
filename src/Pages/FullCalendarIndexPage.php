@@ -4,9 +4,8 @@ declare(strict_types=1);
 
 namespace Warete\MoonShineFullCalendar\Pages;
 
-use Illuminate\Support\Facades\Log;
 use MoonShine\Laravel\Pages\Crud\IndexPage;
-use Warete\MoonShineFullCalendar\Components\FullCalendarComponent;
+use Warete\MoonShineFullCalendar\Components\FullCalendarPageComponent;
 use Warete\MoonShineFullCalendar\Resources\FullCalendarResource;
 
 /**
@@ -18,19 +17,7 @@ use Warete\MoonShineFullCalendar\Resources\FullCalendarResource;
  */
 class FullCalendarIndexPage extends IndexPage
 {
-    /**
-     * Use the FullCalendar component instead of default list component
-     */
-    protected string $component = FullCalendarComponent::class;
-
-    /**
-     * Logging level
-     */
-    protected string $logLevel = 'info';
-
-    /**
-     * Custom page title (optional, override in your page if needed)
-     */
+    protected string $component = FullCalendarPageComponent::class;
 
     /**
      * Enable async mode for calendar (default: true)
@@ -45,17 +32,9 @@ class FullCalendarIndexPage extends IndexPage
     {
         parent::onLoad();
 
-        $this->log('debug', 'FullCalendarIndexPage onLoad called', [
-            'resource_class' => $this->getResource() ? get_class($this->getResource()) : 'null',
-        ]);
-
         // Ensure async mode is enabled for calendar
         if ($this->asyncMode && method_exists($this, 'setAsync')) {
             $this->setAsync(true);
-
-            $this->log('debug', 'Async mode enabled for calendar', [
-                'async' => true,
-            ]);
         }
     }
 
@@ -68,26 +47,7 @@ class FullCalendarIndexPage extends IndexPage
     {
         $resource = parent::getResource();
 
-        if ($resource && !$resource instanceof FullCalendarResource) {
-            $this->log('warning', 'Resource is not a FullCalendarResource', [
-                'resource_class' => get_class($resource),
-                'expected_class' => FullCalendarResource::class,
-            ]);
-        }
-
-        return $resource;
-    }
-
-    /**
-     * Get the component for rendering the calendar
-     */
-    public function getComponent(): string
-    {
-        $this->log('debug', 'Getting component', [
-            'component' => $this->component,
-        ]);
-
-        return $this->component;
+        return $resource instanceof FullCalendarResource ? $resource : null;
     }
 
     /**
@@ -96,10 +56,6 @@ class FullCalendarIndexPage extends IndexPage
     public function setTitle(string $title): static
     {
         $this->title = $title;
-
-        $this->log('debug', 'Title set', [
-            'title' => $title,
-        ]);
 
         return $this;
     }
@@ -123,34 +79,6 @@ class FullCalendarIndexPage extends IndexPage
     {
         $this->asyncMode = $async;
 
-        $this->log('debug', 'Async mode set', [
-            'async' => $async,
-        ]);
-
         return $this;
-    }
-
-    /**
-     * Log a message with level check
-     */
-    protected function log(string $level, string $message, array $context = []): void
-    {
-        $levels = ['debug', 'info', 'warning', 'error'];
-        $currentLevel = strtolower($this->logLevel);
-
-        $levelIndex = array_search(strtolower($level), $levels);
-        $currentLevelIndex = array_search($currentLevel, $levels);
-
-        if ($levelIndex === false || $currentLevelIndex === false || $levelIndex < $currentLevelIndex) {
-            return;
-        }
-
-        $logMessage = sprintf(
-            '[FullCalendarIndexPage.%s] %s',
-            static::class,
-            $message
-        );
-
-        Log::log($level, $logMessage, $context);
     }
 }

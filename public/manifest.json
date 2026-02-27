@@ -1,0 +1,7 @@
+{
+  "resources/js/register.js": {
+    "file": "js/full-calendar.js",
+    "isEntry": true,
+    "src": "resources/js/register.js"
+  }
+}
