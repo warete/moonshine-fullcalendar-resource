@@ -1,9 +1,8 @@
 # MoonShine FullCalendar Resource
 
-<!-- screenshots:
-![Calendar index](./docs/images/calendar-index.png)
-![Event actions](./docs/images/event-actions.png)
--->
+<p align="center">
+  <img src="docs/img/calendar-month-view.png" alt="Calendar month view" width="100%">
+</p>
 
 <p align="center">
 <a href="https://packagist.org/packages/warete/moonshine-fullcalendar-resource"><img src="https://img.shields.io/packagist/dt/warete/moonshine-fullcalendar-resource" alt="Total Downloads"></a>
@@ -39,6 +38,17 @@ The package already ships compiled assets in `public/`, so for package consumers
 - Resource-level hooks for event formatting and per-event actions
 - Support for custom `ActionButton` items per calendar event
 - Configurable views, toolbar, locale, timezone, and grid-create behavior
+
+<p align="center">
+  <img src="docs/img/calendar-week-view.png" alt="Calendar week view" width="32%">
+  <img src="docs/img/calendar-day-view.png" alt="Calendar day view" width="32%">
+  <img src="docs/img/calendar-list-view.png" alt="Calendar list view" width="32%">
+</p>
+
+<p align="center">
+  <img src="docs/img/calendar-event-detail.png" alt="Calendar event detail" width="32%">
+  <img src="docs/img/calendar-event-edit.png" alt="Calendar event edit" width="32%">
+</p>
 
 ## Example
 
